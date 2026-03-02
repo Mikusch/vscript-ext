@@ -1,0 +1,155 @@
+name: Build Extension
+
+on:
+  push:
+    branches: [master]
+    tags: ["*"]
+  pull_request:
+    branches: [master]
+
+env:
+  SM_VERSION: '1.12'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            container: ubuntu:22.04
+            target: x86
+            platform: linux32
+            cc: clang
+            cxx: clang++
+          - os: ubuntu-24.04
+            container: ubuntu:22.04
+            target: x86_64
+            platform: linux64
+            cc: clang
+            cxx: clang++
+          - os: windows-2025
+            target: x86
+            platform: win32
+          - os: windows-2025
+            target: x86_64
+            platform: win64
+
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container || null }}
+
+    steps:
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git curl ca-certificates \
+            python3 python3-pip \
+            clang lld \
+            gcc-multilib g++-multilib libstdc++6 lib32stdc++6 \
+            libc6-dev libc6-dev-i386 linux-libc-dev \
+            lib32z1-dev
+        env:
+          DEBIAN_FRONTEND: noninteractive
+
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: ${{ matrix.target == 'x86' && 'x86' || 'x64' }}
+
+      - name: Checkout hl2sdks
+        shell: bash
+        run: |
+          for sdk in tf2 css hl2dm dods; do
+            git clone --depth 1 --branch $sdk https://github.com/alliedmodders/hl2sdk cache/hl2sdk-$sdk
+          done
+
+      - name: Checkout AMBuild
+        uses: actions/checkout@v6
+        with:
+          repository: alliedmodders/ambuild
+          ref: master
+          path: cache/ambuild
+          fetch-depth: 1
+
+      - name: Checkout SourceMod
+        uses: actions/checkout@v6
+        with:
+          repository: alliedmodders/sourcemod
+          ref: master
+          path: cache/sourcemod
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Checkout Metamod:Source
+        uses: actions/checkout@v6
+        with:
+          repository: alliedmodders/metamod-source
+          ref: 1.12-dev
+          path: cache/metamod-source
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install AMBuild
+        run: pip3 install ./cache/ambuild
+
+      - name: Build
+        shell: bash
+        run: |
+          if [ -n "${{ matrix.cc }}" ]; then
+            export CC="${{ matrix.cc }}"
+            export CXX="${{ matrix.cxx }}"
+          fi
+          git config --global --add safe.directory "$(pwd)"
+          mkdir -p build && cd build
+          python3 ../configure.py \
+            --sdk=tf2,css,hl2dm,dods \
+            --mms-path="../cache/metamod-source" \
+            --sm-path="../cache/sourcemod" \
+            --sdk-root="../cache" \
+            --enable-optimize \
+            --enable-auto-versioning \
+            --targets ${{ matrix.target }}
+          ambuild
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: VScript-${{ matrix.platform }}
+          path: build/package
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+
+      - name: Package
+        run: |
+          cd VScript-linux32 && tar -czf ../VScript-linux32.tar.gz .
+          cd ../VScript-linux64 && tar -czf ../VScript-linux64.tar.gz .
+          cd ../VScript-win32 && zip -r ../VScript-win32.zip .
+          cd ../VScript-win64 && zip -r ../VScript-win64.zip .
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            VScript-linux32.tar.gz
+            VScript-linux64.tar.gz
+            VScript-win32.zip
+            VScript-win64.zip

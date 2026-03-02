@@ -1,0 +1,9 @@
+build/
+safetyhook/
+*.o
+*.so
+*.dll
+*.exp
+*.lib
+*.pdb
+*.ilk
