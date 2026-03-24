@@ -7,9 +7,6 @@ on:
   pull_request:
     branches: [master]
 
-env:
-  SM_VERSION: '1.12'
-
 jobs:
   build:
     strategy:
@@ -101,7 +98,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: alliedmodders/sourcemod
-          ref: master
+          ref: 1.12-dev
           path: cache/sourcemod
           submodules: recursive
           fetch-depth: 1
