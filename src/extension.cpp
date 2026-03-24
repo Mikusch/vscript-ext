@@ -219,18 +219,6 @@ void CVScriptExtension::OnPluginLoaded(IPlugin *plugin)
 {
 	IPluginContext *pContext = plugin->GetBaseContext();
 
-	FillRootTablePubvar(pContext);
-
-	if (!m_pScriptVM)
-		return;
-
-	IPluginFunction *pFunc = pContext->GetFunctionByName("VScript_OnVMInitialized");
-	if (pFunc)
-		pFunc->Execute(nullptr);
-}
-
-void CVScriptExtension::FillRootTablePubvar(IPluginContext *pContext)
-{
 	uint32_t idx;
 	if (pContext->FindPubvarByName("ScriptRootTable", &idx) == SP_ERROR_NONE)
 	{
@@ -238,6 +226,13 @@ void CVScriptExtension::FillRootTablePubvar(IPluginContext *pContext)
 		if (pContext->GetPubvarByIndex(idx, &var) == SP_ERROR_NONE && var)
 			*var->offs = (cell_t)m_hRootTable;
 	}
+
+	if (!m_pScriptVM)
+		return;
+
+	IPluginFunction *pFunc = pContext->GetFunctionByName("VScript_OnVMInitialized");
+	if (pFunc)
+		pFunc->Execute(nullptr);
 }
 
 void CVScriptExtension::OnPluginUnloaded(IPlugin *plugin)

@@ -86,7 +86,6 @@ private:
 	std::unordered_map<CBaseEntity *, Handle_t> m_cachedEntityScopes;
 
 	void ClearEntityHandleCache();
-	void FillRootTablePubvar(IPluginContext *pContext);
 
 	IScriptVM *Hook_CreateVM(ScriptLanguage_t language);
 	void Hook_DestroyVM(IScriptVM *pVM);
