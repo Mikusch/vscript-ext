@@ -154,18 +154,19 @@ jobs:
 
       - name: Package
         run: |
-          cd VScript-linux32 && tar -czf ../VScript-linux32.tar.gz .
-          cd ../VScript-linux64 && tar -czf ../VScript-linux64.tar.gz .
-          cd ../VScript-win32 && zip -r ../VScript-win32.zip .
-          cd ../VScript-win64 && zip -r ../VScript-win64.zip .
+          mkdir VScript-linux VScript-windows
+          cp -r VScript-linux32/* VScript-linux/
+          cp -r VScript-linux64/* VScript-linux/
+          cp -r VScript-win32/* VScript-windows/
+          cp -r VScript-win64/* VScript-windows/
+          cd VScript-linux && tar -czf ../VScript-linux.tar.gz .
+          cd ../VScript-windows && zip -r ../VScript-windows.zip .
 
       - name: Create release
         run: >
           gh release create "${{ github.ref_name }}"
-          VScript-linux32.tar.gz
-          VScript-linux64.tar.gz
-          VScript-win32.zip
-          VScript-win64.zip
+          VScript-linux.tar.gz
+          VScript-windows.zip
           --generate-notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
