@@ -61,9 +61,26 @@ jobs:
 
       - name: Setup MSVC
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: ${{ matrix.target == 'x86' && 'x86' || 'x64' }}
+        shell: pwsh
+        run: |
+          $vsPath = & vswhere -latest -property installationPath
+          $vcvars = Join-Path $vsPath 'VC\Auxiliary\Build\vcvarsall.bat'
+          $arch = "${{ matrix.target == 'x86' && 'x86' || 'x64' }}"
+          $before = @{}
+          foreach ($v in Get-ChildItem env:) { $before[$v.Name] = $v.Value }
+          cmd /c "`"$vcvars`" $arch >nul 2>&1 && set" | ForEach-Object {
+            if ($_ -match '^([^=]+)=(.*)$') {
+              $k, $v = $Matches[1], $Matches[2]
+              if ($before[$k] -eq $v) { return }
+              if ($k -ieq 'Path') {
+                $old = $before['Path'] -split ';'
+                ($v -split ';') | Where-Object { $_ -and $_ -notin $old } |
+                  ForEach-Object { Add-Content $env:GITHUB_PATH $_ }
+              } else {
+                Add-Content $env:GITHUB_ENV "$k=$v"
+              }
+            }
+          }
 
       - name: Checkout hl2sdks
         shell: bash
