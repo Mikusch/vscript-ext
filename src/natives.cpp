@@ -249,7 +249,7 @@ static cell_t Native_GetNumTableEntries(IPluginContext *pContext, const cell_t *
 	return pVM->GetNumTableEntries(hScope);
 }
 
-// native int ScriptHandle.GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &fieldType);
+// native int ScriptHandle.GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &keyType, ScriptFieldType &fieldType);
 static cell_t Native_GetKeyValue(IPluginContext *pContext, const cell_t *params)
 {
 	IScriptVM *pVM = GetVMOrThrow(pContext);
@@ -270,22 +270,14 @@ static cell_t Native_GetKeyValue(IPluginContext *pContext, const cell_t *params)
 		pContext->LocalToString(params[3], &keyBuffer);
 		int keyMaxLen = params[4];
 
-		// Tables can have non-string keys (e.g. the internal delegate)
-		if (key.GetType() == FIELD_CSTRING)
-		{
-			const char *keyStr = (const char *)key;
-			if (keyStr)
-				V_strncpy(keyBuffer, keyStr, keyMaxLen);
-			else
-				keyBuffer[0] = '\0';
-		}
-		else
-		{
-			keyBuffer[0] = '\0';
-		}
+		cell_t *pKeyType;
+		pContext->LocalToPhysAddr(params[5], &pKeyType);
+		*pKeyType = (cell_t)VariantMarshal::EngineToSPField(key.GetType());
+
+		VariantMarshal::ReadVariantString(key, keyBuffer, keyMaxLen);
 
 		cell_t *pFieldType;
-		pContext->LocalToPhysAddr(params[5], &pFieldType);
+		pContext->LocalToPhysAddr(params[6], &pFieldType);
 		*pFieldType = (cell_t)VariantMarshal::EngineToSPField(value.GetType());
 
 		pVM->ReleaseValue(key);

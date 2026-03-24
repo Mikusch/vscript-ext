@@ -241,10 +241,11 @@ methodmap ScriptHandle < Handle
 	 * @param iterator  Current iterator (0 to start).
 	 * @param keyBuffer Buffer to store the key name.
 	 * @param keyMaxLen Maximum length of the key buffer.
+	 * @param keyType   Output for the key's field type.
 	 * @param fieldType Output for the value's field type.
 	 * @return          Next iterator value, or -1 when iteration is complete.
 	 */
-	public native int GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &fieldType);
+	public native int GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &keyType, ScriptFieldType &fieldType);
 
 	/**
 	 * Looks up a named function in this scope.
@@ -260,7 +261,6 @@ methodmap ScriptHandle < Handle
 /**
  * Handle to the VScript root table.
  * Use this when you need to operate on the global scope.
- * Do not close this handle.
  */
 public ScriptHandle ScriptRootTable;
 
