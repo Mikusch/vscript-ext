@@ -707,7 +707,7 @@ native bool VScript_RegisterFunction(const char[] name, ScriptCallback callback,
  * The function is automatically re-registered on map change.
  * Inside the callback, use context.Entity to get the entity the method was called on.
  *
- * @param className     The VScript class name (e.g. "CTFPlayer").
+ * @param className     The VScript class name (e.g. "CBaseEntity").
  * @param name          Function name visible in VScript.
  * @param callback      The SourcePawn function to call.
  * @param description   Optional description for the function.
@@ -798,6 +798,26 @@ native bool VScript_GenerateUniqueKey(const char[] root, char[] buffer, int maxl
  * @param path      The search path to add.
  */
 native void VScript_AddSearchPath(const char[] path);
+
+/**
+ * Looks up a named function on a VScript class.
+ *
+ * @param className Class name to search (e.g. "CBaseEntity").
+ * @param funcName  Function name to look up.
+ * @return          A ScriptHandle to the function, or null if not found.
+ *
+ * @note            The returned handle must be closed when no longer needed.
+ */
+stock ScriptHandle VScript_LookupClassFunction(const char[] className, const char[] funcName)
+{
+	ScriptHandle cls = ScriptRootTable.GetHScript(className);
+	if (!cls)
+		return null;
+
+	ScriptHandle func = cls.LookupFunction(funcName);
+	delete cls;
+	return func;
+}
 
 // ============================================================================
 // Extension
