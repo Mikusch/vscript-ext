@@ -3,7 +3,6 @@ name: Build Extension
 on:
   push:
     branches: [master]
-    tags: ["*"]
   pull_request:
     branches: [master]
 
@@ -142,17 +141,37 @@ jobs:
 
   release:
     name: Release
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check for version change
+        id: version
+        run: |
+          version=$(cat product.version | tr -d '[:space:]')
+          if gh release view "$version" &>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "tag=$version" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Download artifacts
+        if: steps.version.outputs.exists == 'false'
         uses: actions/download-artifact@v8
 
       - name: Package
+        if: steps.version.outputs.exists == 'false'
         run: |
           mkdir VScript-linux VScript-windows
           cp -r VScript-linux32/* VScript-linux/
@@ -163,10 +182,12 @@ jobs:
           cd ../VScript-windows && zip -r ../VScript-windows.zip .
 
       - name: Create release
+        if: steps.version.outputs.exists == 'false'
         run: >
-          gh release create "${{ github.ref_name }}"
+          gh release create "${{ steps.version.outputs.tag }}"
           VScript-linux.tar.gz
           VScript-windows.zip
           --generate-notes
+          --draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
