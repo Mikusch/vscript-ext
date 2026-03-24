@@ -53,7 +53,216 @@ enum ScriptErrorLevel
  * VScript_EntityToHScript and VScript_GetEntityScriptScope which are managed by the extension.
  * All ScriptHandles become invalid after VM shutdown (map change).
  */
-methodmap ScriptHandle < Handle {};
+methodmap ScriptHandle < Handle
+{
+	/**
+	 * Gets the field type of a value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @return          The field type, or ScriptField_Void if the key does not exist.
+	 */
+	public native ScriptFieldType GetType(const char[] key);
+
+	/**
+	 * Checks if a key exists.
+	 *
+	 * @param key       The key name.
+	 * @return          True if the key exists.
+	 */
+	public native bool HasKey(const char[] key);
+
+	/**
+	 * Gets an integer value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @return          The integer value.
+	 */
+	public native int GetInt(const char[] key);
+
+	/**
+	 * Gets a float value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @return          The float value.
+	 */
+	public native float GetFloat(const char[] key);
+
+	/**
+	 * Gets a boolean value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @return          The boolean value.
+	 */
+	public native bool GetBool(const char[] key);
+
+	/**
+	 * Gets a string value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param buffer    Buffer to store the string.
+	 * @param maxlen    Maximum length of the buffer.
+	 * @return          Number of bytes written.
+	 */
+	public native int GetString(const char[] key, char[] buffer, int maxlen);
+
+	/**
+	 * Gets a vector value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param vec       Array to store the vector.
+	 */
+	public native void GetVector(const char[] key, float vec[3]);
+
+	/**
+	 * Gets a Vector2D value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param vec       Array to store the Vector2D.
+	 */
+	public native void GetVector2D(const char[] key, float vec[2]);
+
+	/**
+	 * Gets a Quaternion value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param quat      Array to store the Quaternion.
+	 */
+	public native void GetQuaternion(const char[] key, float quat[4]);
+
+	/**
+	 * Gets an HSCRIPT value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @return          A ScriptHandle, or null if not found.
+	 *
+	 * @note            The returned handle must be closed when no longer needed.
+	 */
+	public native ScriptHandle GetHScript(const char[] key);
+
+	/**
+	 * Sets an integer value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param value     The integer value to set.
+	 * @return          True on success.
+	 */
+	public native bool SetInt(const char[] key, int value);
+
+	/**
+	 * Sets a float value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param value     The float value to set.
+	 * @return          True on success.
+	 */
+	public native bool SetFloat(const char[] key, float value);
+
+	/**
+	 * Sets a boolean value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param value     The boolean value to set.
+	 * @return          True on success.
+	 */
+	public native bool SetBool(const char[] key, bool value);
+
+	/**
+	 * Sets a string value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param value     The string value to set.
+	 * @return          True on success.
+	 */
+	public native bool SetString(const char[] key, const char[] value);
+
+	/**
+	 * Sets a vector value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param vec       The vector value to set.
+	 * @return          True on success.
+	 */
+	public native bool SetVector(const char[] key, const float vec[3]);
+
+	/**
+	 * Sets a Vector2D value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param vec       The Vector2D value to set.
+	 * @return          True on success.
+	 */
+	public native bool SetVector2D(const char[] key, const float vec[2]);
+
+	/**
+	 * Sets a Quaternion value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param quat      The Quaternion value to set.
+	 * @return          True on success.
+	 */
+	public native bool SetQuaternion(const char[] key, const float quat[4]);
+
+	/**
+	 * Sets an HSCRIPT value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @param value     The ScriptHandle value to set (null to set to null HSCRIPT).
+	 * @return          True on success.
+	 */
+	public native bool SetHScript(const char[] key, ScriptHandle value);
+
+	/**
+	 * Sets the value at the given key to null.
+	 *
+	 * @param key       The key name.
+	 * @return          True on success.
+	 */
+	public native bool SetNull(const char[] key);
+
+	/**
+	 * Removes a key from this scope or table.
+	 *
+	 * @param key       The key name.
+	 * @return          True on success, false if the key does not exist.
+	 */
+	public native bool DeleteKey(const char[] key);
+
+	/**
+	 * Number of entries in this table or scope.
+	 */
+	property int Length {
+		public native get();
+	}
+
+	/**
+	 * Iterates over keys in this table or scope.
+	 * Pass 0 as iterator to begin. Returns the next iterator, or -1 when done.
+	 *
+	 * @param iterator  Current iterator (0 to start).
+	 * @param keyBuffer Buffer to store the key name.
+	 * @param keyMaxLen Maximum length of the key buffer.
+	 * @param fieldType Output for the value's field type.
+	 * @return          Next iterator value, or -1 when iteration is complete.
+	 */
+	public native int GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &fieldType);
+
+	/**
+	 * Looks up a named function in this scope.
+	 *
+	 * @param name      Function name to look up.
+	 * @return          A ScriptHandle to the function, or null if not found.
+	 *
+	 * @note            The returned handle must be closed when no longer needed.
+	 */
+	public native ScriptHandle LookupFunction(const char[] name);
+};
+
+/**
+ * Handle to the VScript root table.
+ * Use this when you need to operate on the global scope.
+ * Do not close this handle.
+ */
+public ScriptHandle ScriptRootTable;
 
 // ============================================================================
 // Callback types
@@ -377,7 +586,6 @@ methodmap ScriptCall < Handle
 
 /**
  * Called when the VScript VM has been initialized.
- * Register custom functions here via VScript_RegisterFunction.
  *
  * @note            On late load, this is called automatically if the VM is already running.
  */
@@ -444,10 +652,10 @@ native ScriptHandle VScript_CompileScript(const char[] code, const char[] id = "
  * Runs a previously compiled script.
  *
  * @param script    Compiled script handle from VScript_CompileScript.
- * @param scope     Scope to run in (null for root table).
+ * @param scope     Scope to run in.
  * @return          ScriptStatus_Done on success, ScriptStatus_Error on failure, or ScriptStatus_Running if the script yielded.
  */
-native ScriptStatus VScript_RunScript(ScriptHandle script, ScriptHandle scope = null);
+native ScriptStatus VScript_RunScript(ScriptHandle script, ScriptHandle scope);
 
 // ============================================================================
 // Scopes and Tables
@@ -457,12 +665,12 @@ native ScriptStatus VScript_RunScript(ScriptHandle script, ScriptHandle scope = 
  * Creates a new script scope.
  *
  * @param name      Name of the scope.
- * @param parent    Parent scope (null for root-level scope).
+ * @param parent    Parent scope.
  * @return          A ScriptHandle to the new scope, or null on failure.
  *
  * @note            The returned handle must be closed when no longer needed.
  */
-native ScriptHandle VScript_CreateScope(const char[] name, ScriptHandle parent = null);
+native ScriptHandle VScript_CreateScope(const char[] name, ScriptHandle parent);
 
 /**
  * Creates a new empty script table.
@@ -473,238 +681,9 @@ native ScriptHandle VScript_CreateScope(const char[] name, ScriptHandle parent =
  */
 native ScriptHandle VScript_CreateTable();
 
-/**
- * Returns the number of entries in a table or scope.
- *
- * @param scope     The table or scope handle.
- * @return          Number of entries.
- */
-native int VScript_GetNumTableEntries(ScriptHandle scope);
-
-/**
- * Iterates over keys in a table or scope.
- * Pass 0 as iterator to begin. Returns the next iterator, or -1 when done.
- * To read the actual value, use the key name with the appropriate VScript_GetValue* native.
- *
- * @param scope     The table or scope handle.
- * @param iterator  Current iterator (0 to start).
- * @param keyBuffer Buffer to store the key name.
- * @param keyMaxLen Maximum length of the key buffer.
- * @param fieldType Output for the value's field type.
- * @return          Next iterator value, or -1 when iteration is complete.
- */
-native int VScript_GetNextKey(ScriptHandle scope, int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &fieldType);
-
 // ============================================================================
-// Value Operations
+// Function Registration
 // ============================================================================
-
-/**
- * Checks if a key exists in the given scope.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @return          True if the key exists.
- */
-native bool VScript_ValueExists(ScriptHandle scope, const char[] key);
-
-/**
- * Clears (removes) a key from the given scope.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @return          True on success, false if the key does not exist.
- */
-native bool VScript_ClearValue(ScriptHandle scope, const char[] key);
-
-/**
- * Gets the field type of a value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @return          The field type, or ScriptField_Void if the key does not exist.
- */
-native ScriptFieldType VScript_GetValueType(ScriptHandle scope, const char[] key);
-
-/**
- * Gets an integer value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @return          The integer value.
- */
-native int VScript_GetValueInt(ScriptHandle scope, const char[] key);
-
-/**
- * Gets a boolean value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @return          The boolean value.
- */
-native bool VScript_GetValueBool(ScriptHandle scope, const char[] key);
-
-/**
- * Gets a float value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @return          The float value.
- */
-native float VScript_GetValueFloat(ScriptHandle scope, const char[] key);
-
-/**
- * Gets a string value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param buffer    Buffer to store the string.
- * @param maxlen    Maximum length of the buffer.
- * @return          Number of bytes written.
- */
-native int VScript_GetValueString(ScriptHandle scope, const char[] key, char[] buffer, int maxlen);
-
-/**
- * Gets a vector value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param vec       Array to store the vector.
- */
-native void VScript_GetValueVector(ScriptHandle scope, const char[] key, float vec[3]);
-
-/**
- * Gets a Vector2D value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param vec       Array to store the Vector2D.
- */
-native void VScript_GetValueVector2D(ScriptHandle scope, const char[] key, float vec[2]);
-
-/**
- * Gets a Quaternion value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param quat      Array to store the Quaternion.
- */
-native void VScript_GetValueQuaternion(ScriptHandle scope, const char[] key, float quat[4]);
-
-/**
- * Gets an HSCRIPT value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @return          A ScriptHandle, or null if not found.
- *
- * @note            The returned handle must be closed when no longer needed.
- */
-native ScriptHandle VScript_GetValueHScript(ScriptHandle scope, const char[] key);
-
-/**
- * Sets an integer value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param value     The integer value to set.
- * @return          True on success, false otherwise.
- */
-native bool VScript_SetValueInt(ScriptHandle scope, const char[] key, int value);
-
-/**
- * Sets a float value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param value     The float value to set.
- * @return          True on success, false otherwise.
- */
-native bool VScript_SetValueFloat(ScriptHandle scope, const char[] key, float value);
-
-/**
- * Sets a bool value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param value     The bool value to set.
- * @return          True on success, false otherwise.
- */
-native bool VScript_SetValueBool(ScriptHandle scope, const char[] key, bool value);
-
-/**
- * Sets a string value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param value     The string value to set.
- * @return          True on success, false otherwise.
- */
-native bool VScript_SetValueString(ScriptHandle scope, const char[] key, const char[] value);
-
-/**
- * Sets a vector value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param vec       The vector value to set.
- * @return          True on success, false otherwise.
- */
-native bool VScript_SetValueVector(ScriptHandle scope, const char[] key, const float vec[3]);
-
-/**
- * Sets a Vector2D value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param vec       The Vector2D value to set.
- * @return          True on success, false otherwise.
- */
-native bool VScript_SetValueVector2D(ScriptHandle scope, const char[] key, const float vec[2]);
-
-/**
- * Sets a Quaternion value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param quat      The Quaternion value to set.
- * @return          True on success, false otherwise.
- */
-native bool VScript_SetValueQuaternion(ScriptHandle scope, const char[] key, const float quat[4]);
-
-/**
- * Sets an HSCRIPT value at the given key.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @param value     The ScriptHandle value to set.
- * @return          True on success, false otherwise.
- */
-native bool VScript_SetValueHScript(ScriptHandle scope, const char[] key, ScriptHandle value);
-
-/**
- * Sets the value at the given key to null.
- *
- * @param scope     The scope/table handle (null for root table).
- * @param key       The key name.
- * @return          True on success, false otherwise.
- */
-native bool VScript_SetValueNull(ScriptHandle scope, const char[] key);
-
-// ============================================================================
-// Functions
-// ============================================================================
-
-/**
- * Looks up a named function in the given scope (or root table if null).
- *
- * @param name      Function name to look up.
- * @param scope     Scope to search in (null for root table).
- * @return          A ScriptHandle to the function, or null if not found.
- *
- * @note            The returned handle must be closed when no longer needed.
- */
-native ScriptHandle VScript_LookupFunction(const char[] name, ScriptHandle scope = null);
 
 /**
  * Registers a new VScript function that calls back to SourcePawn when invoked.
@@ -845,29 +824,6 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("VScript_RunScript");
 	MarkNativeAsOptional("VScript_CreateScope");
 	MarkNativeAsOptional("VScript_CreateTable");
-	MarkNativeAsOptional("VScript_GetNumTableEntries");
-	MarkNativeAsOptional("VScript_GetNextKey");
-	MarkNativeAsOptional("VScript_ValueExists");
-	MarkNativeAsOptional("VScript_ClearValue");
-	MarkNativeAsOptional("VScript_GetValueType");
-	MarkNativeAsOptional("VScript_GetValueInt");
-	MarkNativeAsOptional("VScript_GetValueBool");
-	MarkNativeAsOptional("VScript_GetValueFloat");
-	MarkNativeAsOptional("VScript_GetValueString");
-	MarkNativeAsOptional("VScript_GetValueVector");
-	MarkNativeAsOptional("VScript_GetValueVector2D");
-	MarkNativeAsOptional("VScript_GetValueQuaternion");
-	MarkNativeAsOptional("VScript_GetValueHScript");
-	MarkNativeAsOptional("VScript_SetValueInt");
-	MarkNativeAsOptional("VScript_SetValueFloat");
-	MarkNativeAsOptional("VScript_SetValueBool");
-	MarkNativeAsOptional("VScript_SetValueString");
-	MarkNativeAsOptional("VScript_SetValueVector");
-	MarkNativeAsOptional("VScript_SetValueVector2D");
-	MarkNativeAsOptional("VScript_SetValueQuaternion");
-	MarkNativeAsOptional("VScript_SetValueHScript");
-	MarkNativeAsOptional("VScript_SetValueNull");
-	MarkNativeAsOptional("VScript_LookupFunction");
 	MarkNativeAsOptional("VScript_RegisterFunction");
 	MarkNativeAsOptional("VScript_RegisterClassFunction");
 	MarkNativeAsOptional("VScript_UnregisterFunction");
@@ -877,6 +833,31 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("VScript_HScriptToEntity");
 	MarkNativeAsOptional("VScript_GenerateUniqueKey");
 	MarkNativeAsOptional("VScript_AddSearchPath");
+
+	// ScriptHandle methodmap
+	MarkNativeAsOptional("ScriptHandle.GetType");
+	MarkNativeAsOptional("ScriptHandle.HasKey");
+	MarkNativeAsOptional("ScriptHandle.GetInt");
+	MarkNativeAsOptional("ScriptHandle.GetFloat");
+	MarkNativeAsOptional("ScriptHandle.GetBool");
+	MarkNativeAsOptional("ScriptHandle.GetString");
+	MarkNativeAsOptional("ScriptHandle.GetVector");
+	MarkNativeAsOptional("ScriptHandle.GetVector2D");
+	MarkNativeAsOptional("ScriptHandle.GetQuaternion");
+	MarkNativeAsOptional("ScriptHandle.GetHScript");
+	MarkNativeAsOptional("ScriptHandle.SetInt");
+	MarkNativeAsOptional("ScriptHandle.SetFloat");
+	MarkNativeAsOptional("ScriptHandle.SetBool");
+	MarkNativeAsOptional("ScriptHandle.SetString");
+	MarkNativeAsOptional("ScriptHandle.SetVector");
+	MarkNativeAsOptional("ScriptHandle.SetVector2D");
+	MarkNativeAsOptional("ScriptHandle.SetQuaternion");
+	MarkNativeAsOptional("ScriptHandle.SetHScript");
+	MarkNativeAsOptional("ScriptHandle.SetNull");
+	MarkNativeAsOptional("ScriptHandle.DeleteKey");
+	MarkNativeAsOptional("ScriptHandle.Length.get");
+	MarkNativeAsOptional("ScriptHandle.GetNextKey");
+	MarkNativeAsOptional("ScriptHandle.LookupFunction");
 
 	// ScriptCall methodmap
 	MarkNativeAsOptional("ScriptCall.ScriptCall");

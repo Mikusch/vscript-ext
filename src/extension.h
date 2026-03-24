@@ -72,6 +72,7 @@ private:
 	HandleType_t m_htHScript = 0;
 	HandleType_t m_htScriptContext = 0;
 	HandleType_t m_htScriptCall = 0;
+	Handle_t m_hRootTable = BAD_HANDLE;
 
 	IForward *m_pOnVMInit = nullptr;
 	IForward *m_pOnVMShutdown = nullptr;
@@ -85,6 +86,7 @@ private:
 	std::unordered_map<CBaseEntity *, Handle_t> m_cachedEntityScopes;
 
 	void ClearEntityHandleCache();
+	void FillRootTablePubvar(IPluginContext *pContext);
 
 	IScriptVM *Hook_CreateVM(ScriptLanguage_t language);
 	void Hook_DestroyVM(IScriptVM *pVM);

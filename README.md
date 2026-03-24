@@ -119,18 +119,18 @@ void OnConPrint(ScriptContext context)
 	switch (context.GetArgType(0))
 	{
 		case ScriptField_Int:
-			LogMessage("%d", context.GetArgInt(0));
+			PrintToServer("%d", context.GetArgInt(0));
 		case ScriptField_Float:
-			LogMessage("%f", context.GetArgFloat(0));
+			PrintToServer("%f", context.GetArgFloat(0));
 		case ScriptField_Bool:
-			LogMessage(context.GetArgBool(0) ? "true" : "false");
+			PrintToServer(context.GetArgBool(0) ? "true" : "false");
 		case ScriptField_Void:
-			LogMessage("null");
+			PrintToServer("null");
 		case ScriptField_String:
 		{
 			char buffer[256];
 			context.GetArgString(0, buffer, sizeof(buffer));
-			LogMessage(buffer);
+			PrintToServer(buffer);
 		}
 	}
 }
@@ -165,6 +165,9 @@ public void OnPluginStart()
 void OnSetRenderColor(ScriptContext context)
 {
 	int entity = context.Entity;
+	if (entity == -1)
+		return;
+
 	int r = context.GetArgInt(0);
 	int g = context.GetArgInt(1);
 	int b = context.GetArgInt(2);
@@ -175,6 +178,9 @@ void OnSetRenderColor(ScriptContext context)
 void OnIsSourceTV(ScriptContext context)
 {
 	int player = context.Entity;
+	if (player == -1)
+		return;
+
 	context.SetReturnBool(IsClientSourceTV(player));
 }
 ```
@@ -217,7 +223,7 @@ void PrintEntityName(int entity)
 
 	char name[64];
 	g_GetEntityName.GetReturnString(name, sizeof(name));
-	LogMessage("Entity name: %s", name);
+	PrintToServer("Entity name: %s", name);
 }
 ```
 
@@ -257,10 +263,10 @@ void ReadScriptScope(int entity)
 		return;
 
 	// self.is_boss <- true
-	if (VScript_ValueExists(scope, "is_boss"))
+	if (scope.HasKey("is_boss"))
 	{
-		bool isBoss = VScript_GetValueBool(scope, "is_boss");
-		LogMessage("Entity %d is_boss = %s", entity, isBoss ? "true" : "false");
+		bool isBoss = scope.GetBool("is_boss");
+		PrintToServer("Entity %d is_boss = %s", entity, isBoss ? "true" : "false");
 	}
 }
 ```

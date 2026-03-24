@@ -151,6 +151,10 @@ bool CVScriptExtension::SDK_OnLoad(char *error, size_t maxlength, bool late)
 	m_htScriptContext = handlesys->CreateType("ScriptContext", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
 	m_htScriptCall = handlesys->CreateType("ScriptCall", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
 
+	// HSCRIPT nullptr = root table in the VM
+	HScriptHandle *pRoot = new HScriptHandle(nullptr, HScriptType::Table, HScriptOwnership::Borrowed);
+	m_hRootTable = handlesys->CreateHandle(m_htHScript, pRoot, myself->GetIdentity(), myself->GetIdentity(), nullptr);
+
 	m_pOnVMInit = forwards->CreateForward("VScript_OnVMInitialized", ET_Ignore, 0, nullptr);
 	m_pOnVMShutdown = forwards->CreateForward("VScript_OnVMShutdown", ET_Ignore, 0, nullptr);
 	m_pOnScriptPrint = forwards->CreateForward("VScript_OnScriptPrint", ET_Ignore, 1, nullptr, Param_String);
@@ -186,6 +190,13 @@ void CVScriptExtension::SDK_OnUnload()
 
 	ClearEntityHandleCache();
 
+	if (m_hRootTable != BAD_HANDLE)
+	{
+		HandleSecurity sec(myself->GetIdentity(), myself->GetIdentity());
+		handlesys->FreeHandle(m_hRootTable, &sec);
+		m_hRootTable = BAD_HANDLE;
+	}
+
 	auto removeType = [](HandleType_t &ht) {
 		if (ht) { handlesys->RemoveType(ht, myself->GetIdentity()); ht = 0; }
 	};
@@ -206,12 +217,27 @@ void CVScriptExtension::SDK_OnUnload()
 
 void CVScriptExtension::OnPluginLoaded(IPlugin *plugin)
 {
+	IPluginContext *pContext = plugin->GetBaseContext();
+
+	FillRootTablePubvar(pContext);
+
 	if (!m_pScriptVM)
 		return;
 
-	IPluginFunction *pFunc = plugin->GetBaseContext()->GetFunctionByName("VScript_OnVMInitialized");
+	IPluginFunction *pFunc = pContext->GetFunctionByName("VScript_OnVMInitialized");
 	if (pFunc)
 		pFunc->Execute(nullptr);
+}
+
+void CVScriptExtension::FillRootTablePubvar(IPluginContext *pContext)
+{
+	uint32_t idx;
+	if (pContext->FindPubvarByName("ScriptRootTable", &idx) == SP_ERROR_NONE)
+	{
+		sp_pubvar_t *var = nullptr;
+		if (pContext->GetPubvarByIndex(idx, &var) == SP_ERROR_NONE && var)
+			*var->offs = (cell_t)m_hRootTable;
+	}
 }
 
 void CVScriptExtension::OnPluginUnloaded(IPlugin *plugin)
