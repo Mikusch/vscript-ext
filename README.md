@@ -1,8 +1,8 @@
 # VScript
 
-A SourceMod extension that bridges **SourcePawn** and **VScript**, giving plugins full access to the Squirrel VM.
+A SourceMod extension that bridges **SourcePawn** and **VScript**, giving plugins full access to the scripting VM.
 
-This extension is compiled against official Source SDK Base 2013 headers and requires no gamedata.
+This extension is compiled against official [Source SDK 2013](https://github.com/ValveSoftware/source-sdk-2013) headers and requires no gamedata.
 
 Supported Games:
 
@@ -289,4 +289,4 @@ ambuild
 
 ---
 
-Special thanks to [Batfoxkid](https://github.com/Batfoxkid) for thoroughly testing the extension.
+Special thanks to [Batfoxkid](https://github.com/Batfoxkid) for thoroughly testing the extension and to [Kenzzer](https://github.com/Kenzzer) for helping with the design.
