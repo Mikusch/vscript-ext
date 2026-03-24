@@ -209,6 +209,7 @@ ScriptCall g_GetEntityName;
 
 public void OnPluginStart()
 {
+	// string GetEntityName(handle entity)
 	g_GetEntityName = new ScriptCall("GetEntityName", ScriptField_String, ScriptField_HScript);
 }
 
@@ -242,7 +243,7 @@ void OnIgnite(ScriptContext context)
 {
 	int entity = VScript_HScriptToEntity(context.GetArgHScript(0));
 	if (entity != -1)
-		IgniteEntity(entity, 5.0);
+		IgniteEntity(entity, 10.0);
 }
 ```
 
@@ -251,9 +252,9 @@ local player = PlayerInstanceFromIndex(1)
 Ignite(player)
 ```
 
-### Reading Entity Scopes
+### Working with Entity Scopes
 
-Access variables set by VScript code on an entity's script scope:
+Read and write variables on an entity's script scope:
 
 ```sourcepawn
 void ReadScriptScope(int entity)
@@ -262,11 +263,11 @@ void ReadScriptScope(int entity)
 	if (!scope)
 		return;
 
-	// self.is_boss <- true
-	if (scope.HasKey("is_boss"))
+	// Read a value set by a script: self.is_boss <- true
+	if (scope.HasKey("is_boss") && scope.GetBool("is_boss"))
 	{
-		bool isBoss = scope.GetBool("is_boss");
-		PrintToServer("Entity %d is_boss = %s", entity, isBoss ? "true" : "false");
+		// Write a value that scripts can read later
+		scope.SetInt("health", 1000);
 	}
 }
 ```
