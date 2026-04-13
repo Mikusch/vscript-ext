@@ -49,6 +49,131 @@ enum ScriptErrorLevel
 // ============================================================================
 
 /**
+ * Iterator for traversing key-value pairs in a table, scope, or array.
+ */
+methodmap ScriptIterator < Handle
+{
+	/**
+	 * Advances to the next key-value pair.
+	 *
+	 * @return          True if a pair was found, false when iteration is complete.
+	 */
+	public native bool Next();
+
+	/**
+	 * Gets the key at the current position as a string.
+	 * For arrays, this is the string representation of the index.
+	 *
+	 * @param buffer    Buffer to store the key name.
+	 * @param maxlen    Maximum length of the buffer.
+	 * @return          Number of bytes written.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetKeyString(char[] buffer, int maxlen);
+
+	/**
+	 * Gets the key at the current position as an integer.
+	 * For arrays, this is the element index.
+	 *
+	 * @return          The key as an integer.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetKeyInt();
+
+	/**
+	 * The field type of the key at the current position.
+	 *
+	 * @error           Next() was not called or returned false.
+	 */
+	property ScriptFieldType KeyType {
+		public native get();
+	}
+
+	/**
+	 * The field type of the value at the current position.
+	 *
+	 * @error           Next() was not called or returned false.
+	 */
+	property ScriptFieldType ValueType {
+		public native get();
+	}
+
+	/**
+	 * Gets an integer value at the current position.
+	 *
+	 * @return          The integer value.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetInt();
+
+	/**
+	 * Gets a boolean value at the current position.
+	 *
+	 * @return          The boolean value.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native bool GetBool();
+
+	/**
+	 * Gets a float value at the current position.
+	 *
+	 * @return          The float value.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native float GetFloat();
+
+	/**
+	 * Gets a string value at the current position.
+	 *
+	 * @param buffer    Buffer to store the string.
+	 * @param maxlen    Maximum length of the buffer.
+	 * @return          Number of bytes written.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetString(char[] buffer, int maxlen);
+
+	/**
+	 * Gets a vector value at the current position.
+	 *
+	 * @param vec       Array to store the vector.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native void GetVector(float vec[3]);
+
+	/**
+	 * Gets a Vector2D value at the current position.
+	 *
+	 * @param vec       Array to store the Vector2D.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native void GetVector2D(float vec[2]);
+
+	/**
+	 * Gets a Quaternion value at the current position.
+	 *
+	 * @param quat      Array to store the Quaternion.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native void GetQuaternion(float quat[4]);
+
+	/**
+	 * Gets an HSCRIPT value at the current position.
+	 *
+	 * @return          A ScriptHandle, or null if not found. Must be closed with delete when done.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native ScriptHandle GetHScript();
+
+	/**
+	 * Gets an entity index from an HSCRIPT instance or EHANDLE value at the current position.
+	 *
+	 * @return          Entity index, or -1 if invalid or not an entity.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetEntity();
+};
+
+/**
  * Handle wrapping an HSCRIPT representing a scope, table, function, or class instance.
  * All ScriptHandles must be closed when no longer needed, with some exceptions (read the function documentation).
  * All ScriptHandles become invalid after VM shutdown (map change).
@@ -243,6 +368,14 @@ methodmap ScriptHandle < Handle
 	}
 
 	/**
+	 * Creates an iterator for traversing key-value pairs.
+	 * Works for tables, scopes, and arrays.
+	 *
+	 * @return          A new ScriptIterator. Must be closed with delete when done.
+	 */
+	public native ScriptIterator Iterate();
+
+	/**
 	 * Iterates over keys in this table or scope.
 	 * Pass 0 as iterator to begin. Returns the next iterator, or -1 when done.
 	 *
@@ -252,7 +385,11 @@ methodmap ScriptHandle < Handle
 	 * @param keyType   Output for the key's field type.
 	 * @param fieldType Output for the value's field type.
 	 * @return          Next iterator value, or -1 when iteration is complete.
+	 *
+	 * @deprecated      Use Iterate() instead.
+	 *                  GetNextKey only exposes keys, not values, and value retrieval via Get*(key) does not work for arrays.
 	 */
+	#pragma deprecated Use Iterate() instead
 	public native int GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &keyType = ScriptField_Void, ScriptFieldType &fieldType = ScriptField_Void);
 
 	/**
@@ -910,7 +1047,24 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptHandle.DeleteKey");
 	MarkNativeAsOptional("ScriptHandle.Length.get");
 	MarkNativeAsOptional("ScriptHandle.GetNextKey");
+	MarkNativeAsOptional("ScriptHandle.Iterate");
 	MarkNativeAsOptional("ScriptHandle.LookupFunction");
+
+	// ScriptIterator methodmap
+	MarkNativeAsOptional("ScriptIterator.Next");
+	MarkNativeAsOptional("ScriptIterator.GetKeyString");
+	MarkNativeAsOptional("ScriptIterator.GetKeyInt");
+	MarkNativeAsOptional("ScriptIterator.KeyType.get");
+	MarkNativeAsOptional("ScriptIterator.ValueType.get");
+	MarkNativeAsOptional("ScriptIterator.GetInt");
+	MarkNativeAsOptional("ScriptIterator.GetBool");
+	MarkNativeAsOptional("ScriptIterator.GetFloat");
+	MarkNativeAsOptional("ScriptIterator.GetString");
+	MarkNativeAsOptional("ScriptIterator.GetVector");
+	MarkNativeAsOptional("ScriptIterator.GetVector2D");
+	MarkNativeAsOptional("ScriptIterator.GetQuaternion");
+	MarkNativeAsOptional("ScriptIterator.GetHScript");
+	MarkNativeAsOptional("ScriptIterator.GetEntity");
 
 	// ScriptCall methodmap
 	MarkNativeAsOptional("ScriptCall.ScriptCall");

@@ -61,6 +61,7 @@ public:
 	HandleType_t GetHScriptHandleType() const { return m_htHScript; }
 	HandleType_t GetScriptContextHandleType() const { return m_htScriptContext; }
 	HandleType_t GetScriptCallHandleType() const { return m_htScriptCall; }
+	HandleType_t GetScriptIteratorHandleType() const { return m_htScriptIterator; }
 
 	IForward *GetOnScriptPrintForward() const { return m_pOnScriptPrint; }
 	IForward *GetOnScriptErrorForward() const { return m_pOnScriptError; }
@@ -72,6 +73,7 @@ private:
 	HandleType_t m_htHScript = 0;
 	HandleType_t m_htScriptContext = 0;
 	HandleType_t m_htScriptCall = 0;
+	HandleType_t m_htScriptIterator = 0;
 	Handle_t m_hRootTable = BAD_HANDLE;
 
 	IForward *m_pOnVMInit = nullptr;

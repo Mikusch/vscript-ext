@@ -150,6 +150,7 @@ bool CVScriptExtension::SDK_OnLoad(char *error, size_t maxlength, bool late)
 	m_htHScript = handlesys->CreateType("ScriptHandle", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
 	m_htScriptContext = handlesys->CreateType("ScriptContext", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
 	m_htScriptCall = handlesys->CreateType("ScriptCall", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
+	m_htScriptIterator = handlesys->CreateType("ScriptIterator", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
 
 	// HSCRIPT nullptr = root table in the VM
 	HScriptHandle *pRoot = new HScriptHandle(nullptr, HScriptType::Table, HScriptOwnership::Borrowed);
@@ -203,6 +204,7 @@ void CVScriptExtension::SDK_OnUnload()
 	removeType(m_htHScript);
 	removeType(m_htScriptContext);
 	removeType(m_htScriptCall);
+	removeType(m_htScriptIterator);
 
 	auto releaseForward = [](IForward *&fwd) {
 		if (fwd) { forwards->ReleaseForward(fwd); fwd = nullptr; }
@@ -347,6 +349,10 @@ void CVScriptExtension::OnHandleDestroy(HandleType_t type, void *object)
 	else if (type == m_htScriptContext)
 	{
 		// ScriptContext lifetime is managed by the dispatcher
+	}
+	else if (type == m_htScriptIterator)
+	{
+		delete static_cast<ScriptIteratorState *>(object);
 	}
 	else if (type == m_htScriptCall)
 	{
