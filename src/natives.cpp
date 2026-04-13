@@ -149,15 +149,21 @@ static cell_t Native_IsVMInitialized(IPluginContext *pContext, const cell_t *par
 	return g_VScriptExt.GetVM() != nullptr;
 }
 
-// native ScriptStatus VScript_Run(const char[] code);
+// native ScriptStatus VScript_Run(const char[] code, any ...);
 static cell_t Native_Run(IPluginContext *pContext, const cell_t *params)
 {
 	IScriptVM *pVM = GetVMOrThrow(pContext);
 	if (!pVM) return 0;
 
+	if (params[0] > 1)
+	{
+		char buffer[4096];
+		smutils->FormatString(buffer, sizeof(buffer), pContext, params, 1);
+		return (cell_t)pVM->Run(buffer);
+	}
+
 	char *code;
 	pContext->LocalToString(params[1], &code);
-
 	return (cell_t)pVM->Run(code);
 }
 

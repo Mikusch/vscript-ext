@@ -626,9 +626,10 @@ native bool VScript_IsVMInitialized();
  * Executes a string of VScript code directly.
  *
  * @param code      The VScript code to run.
+ * @param ...       Variable number of format parameters.
  * @return          ScriptStatus_Done on success, ScriptStatus_Error on failure, or ScriptStatus_Running if the script yielded.
  */
-native ScriptStatus VScript_Run(const char[] code);
+native ScriptStatus VScript_Run(const char[] code, any ...);
 
 // ============================================================================
 // Compilation
