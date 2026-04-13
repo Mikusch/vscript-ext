@@ -606,9 +606,10 @@ methodmap ScriptContext < Handle
 	 * Raises an exception in the VScript VM.
 	 * The return value is suppressed and the exception is propagated to VScript (catchable via try/catch).
 	 *
-	 * @param text      The exception message.
+	 * @param format    The exception message format string.
+	 * @param ...       Variable number of format parameters.
 	 */
-	public native void RaiseException(const char[] text);
+	public native void RaiseException(const char[] format, any ...);
 };
 
 /**

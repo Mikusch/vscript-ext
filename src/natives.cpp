@@ -1770,16 +1770,25 @@ static cell_t Native_GenerateUniqueKey(IPluginContext *pContext, const cell_t *p
 	return pVM->GenerateUniqueKey(root, buffer, maxlen);
 }
 
-// native void ScriptContext.RaiseException(const char[] text);
+// native void ScriptContext.RaiseException(const char[] format, any ...);
 static cell_t Native_ScriptContext_RaiseException(IPluginContext *pContext, const cell_t *params)
 {
 	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
 	if (!pCtx) return 0;
 
-	char *text;
-	pContext->LocalToString(params[2], &text);
+	if (params[0] > 2)
+	{
+		char buffer[512];
+		smutils->FormatString(buffer, sizeof(buffer), pContext, params, 2);
+		pCtx->RaiseException(buffer);
+	}
+	else
+	{
+		char *text;
+		pContext->LocalToString(params[2], &text);
+		pCtx->RaiseException(text);
+	}
 
-	pCtx->RaiseException(text);
 	return 0;
 }
 
