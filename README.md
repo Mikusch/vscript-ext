@@ -193,6 +193,54 @@ player.SetRenderColor(255, 0, 0, 255)
 printl("Is this player SourceTV? " + (player.IsSourceTV() ? "Yep!" : "Nope."))
 ```
 
+### Iterating Tables and Arrays
+
+Use `ScriptIterator` to traverse key-value pairs in tables, scopes, and arrays:
+
+```sourcepawn
+void PrintTable(ScriptHandle table)
+{
+	ScriptIterator iter = table.Iterate();
+	while (iter.Next())
+	{
+		char key[64];
+		iter.GetKeyString(key, sizeof(key));
+
+		switch (iter.ValueType)
+		{
+			case ScriptField_Int:
+				PrintToServer("%s = %d", key, iter.GetInt());
+			case ScriptField_Float:
+				PrintToServer("%s = %f", key, iter.GetFloat());
+			case ScriptField_String:
+			{
+				char val[256];
+				iter.GetString(val, sizeof(val));
+				PrintToServer("%s = %s", key, val);
+			}
+		}
+	}
+	delete iter;
+}
+```
+
+For arrays, keys are integer indices accessible via `GetKeyInt()`:
+
+```sourcepawn
+void SumArray(ScriptHandle arr)
+{
+	int sum = 0;
+	ScriptIterator iter = arr.Iterate();
+	while (iter.Next())
+	{
+		sum += iter.GetInt();
+	}
+	delete iter;
+
+	PrintToServer("Sum: %d", sum);
+}
+```
+
 ### Working with Entity Handles
 
 > [!IMPORTANT]
