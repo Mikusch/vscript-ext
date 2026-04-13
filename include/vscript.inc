@@ -388,6 +388,14 @@ methodmap ScriptContext < Handle
 	public native ScriptHandle GetArgHScript(int arg);
 
 	/**
+	 * Gets an entity index from an HSCRIPT argument.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @return          Entity index, or -1 if invalid or not an entity.
+	 */
+	public native int GetArgEntity(int arg);
+
+	/**
 	 * Sets the return value to an integer.
 	 *
 	 * @param value     The integer to return.
@@ -442,6 +450,15 @@ methodmap ScriptContext < Handle
 	 * @param handle    The ScriptHandle to return.
 	 */
 	public native void SetReturnHScript(ScriptHandle handle);
+
+	/**
+	 * Sets the return value to an entity's HSCRIPT instance.
+	 * Creates the script instance if it doesn't already exist.
+	 *
+	 * @param entity    Entity index.
+	 * @error           Invalid entity index or failed to create script instance.
+	 */
+	public native void SetReturnEntity(int entity);
 
 	/**
 	 * Sets the return value to null/void.
@@ -575,6 +592,14 @@ methodmap ScriptCall < Handle
 	 * @note            The returned handle must be closed when no longer needed.
 	 */
 	public native ScriptHandle GetReturnHScript();
+
+	/**
+	 * Gets the return value as an entity index.
+	 *
+	 * @return          Entity index, or -1 if invalid or not an entity.
+	 * @error           ScriptCall has not been executed yet.
+	 */
+	public native int GetReturnEntity();
 
 	/**
 	 * Checks if the return value is null.
@@ -900,6 +925,7 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptCall.GetReturnVector2D");
 	MarkNativeAsOptional("ScriptCall.GetReturnQuaternion");
 	MarkNativeAsOptional("ScriptCall.GetReturnHScript");
+	MarkNativeAsOptional("ScriptCall.GetReturnEntity");
 	MarkNativeAsOptional("ScriptCall.IsReturnNull");
 
 	// ScriptContext methodmap
@@ -914,6 +940,7 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptContext.GetArgVector2D");
 	MarkNativeAsOptional("ScriptContext.GetArgQuaternion");
 	MarkNativeAsOptional("ScriptContext.GetArgHScript");
+	MarkNativeAsOptional("ScriptContext.GetArgEntity");
 	MarkNativeAsOptional("ScriptContext.SetReturnInt");
 	MarkNativeAsOptional("ScriptContext.SetReturnFloat");
 	MarkNativeAsOptional("ScriptContext.SetReturnBool");
@@ -922,6 +949,7 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptContext.SetReturnVector2D");
 	MarkNativeAsOptional("ScriptContext.SetReturnQuaternion");
 	MarkNativeAsOptional("ScriptContext.SetReturnHScript");
+	MarkNativeAsOptional("ScriptContext.SetReturnEntity");
 	MarkNativeAsOptional("ScriptContext.SetReturnNull");
 	MarkNativeAsOptional("ScriptContext.RaiseException");
 }

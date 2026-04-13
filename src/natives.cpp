@@ -1041,6 +1041,29 @@ static cell_t Native_ScriptCall_GetReturnHScript(IPluginContext *pContext, const
 	return (cell_t)CreateHScriptHandle(pContext, h, HScriptType::Table, HScriptOwnership::Owned);
 }
 
+// native int ScriptCall.GetReturnEntity();
+static cell_t Native_ScriptCall_GetReturnEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return -1;
+
+	ScriptCallContext *pCall = ReadExecutedScriptCall(pContext, params[1]);
+	if (!pCall) return -1;
+
+	HSCRIPT h = VariantMarshal::ReadVariantHScript(pCall->returnValue);
+	if (!h)
+		return -1;
+
+	void *pInstance = pVM->GetInstanceValue(h, nullptr);
+	if (!pInstance)
+		return -1;
+
+	if (!g_VScriptExt.IsKnownEntity(pInstance))
+		return -1;
+
+	return gamehelpers->EntityToBCompatRef(static_cast<CBaseEntity *>(pInstance));
+}
+
 // native bool ScriptCall.IsReturnNull();
 static cell_t Native_ScriptCall_IsReturnNull(IPluginContext *pContext, const cell_t *params)
 {
@@ -1233,6 +1256,31 @@ static cell_t Native_ScriptContext_SetReturnHScript(IPluginContext *pContext, co
 	return 0;
 }
 
+// native void ScriptContext.SetReturnEntity(int entity);
+static cell_t Native_ScriptContext_SetReturnEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	FindEntityScriptOffsets();
+	if (s_offsetHScriptInstance == -1)
+		return pContext->ThrowNativeError("Could not find entity hscript instance offset");
+
+	CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(params[2]);
+	if (!pEntity)
+		return pContext->ThrowNativeError("Invalid entity index %d", params[2]);
+
+	HSCRIPT hScript = EnsureEntityScriptInstance(pVM, pEntity);
+	if (!hScript)
+		return pContext->ThrowNativeError("Failed to create script instance for entity %d", params[2]);
+
+	pCtx->SetReturnHScript(hScript);
+	return 0;
+}
+
 // native void ScriptContext.SetReturnNull();
 static cell_t Native_ScriptContext_SetReturnNull(IPluginContext *pContext, const cell_t *params)
 {
@@ -1241,6 +1289,29 @@ static cell_t Native_ScriptContext_SetReturnNull(IPluginContext *pContext, const
 
 	pCtx->SetReturnNull();
 	return 0;
+}
+
+// native int ScriptContext.GetArgEntity(int arg);
+static cell_t Native_ScriptContext_GetArgEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return -1;
+
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return -1;
+
+	HSCRIPT h = pCtx->GetArgHScript(params[2]);
+	if (!h)
+		return -1;
+
+	void *pInstance = pVM->GetInstanceValue(h, nullptr);
+	if (!pInstance)
+		return -1;
+
+	if (!g_VScriptExt.IsKnownEntity(pInstance))
+		return -1;
+
+	return gamehelpers->EntityToBCompatRef(static_cast<CBaseEntity *>(pInstance));
 }
 
 // native int ScriptContext.Entity.get();
@@ -1535,6 +1606,7 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptCall.GetReturnVector2D",     Native_ScriptCall_GetReturnFloatArray<2, VariantMarshal::ReadVariantVector2D> },
 	{ "ScriptCall.GetReturnQuaternion",   Native_ScriptCall_GetReturnFloatArray<4, VariantMarshal::ReadVariantQuaternion> },
 	{ "ScriptCall.GetReturnHScript",      Native_ScriptCall_GetReturnHScript },
+	{ "ScriptCall.GetReturnEntity",       Native_ScriptCall_GetReturnEntity },
 	{ "ScriptCall.IsReturnNull",          Native_ScriptCall_IsReturnNull },
 
 	// ScriptContext methodmap
@@ -1548,6 +1620,7 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptContext.GetArgVector2D",      Native_ScriptContext_GetArgFloatArray<2, &ScriptContext::GetArgVector2D> },
 	{ "ScriptContext.GetArgQuaternion",    Native_ScriptContext_GetArgFloatArray<4, &ScriptContext::GetArgQuaternion> },
 	{ "ScriptContext.GetArgHScript",       Native_ScriptContext_GetArgHScript },
+	{ "ScriptContext.GetArgEntity",        Native_ScriptContext_GetArgEntity },
 	{ "ScriptContext.SetReturnInt",        Native_ScriptContext_SetReturnInt },
 	{ "ScriptContext.SetReturnFloat",      Native_ScriptContext_SetReturnFloat },
 	{ "ScriptContext.SetReturnBool",       Native_ScriptContext_SetReturnBool },
@@ -1556,6 +1629,7 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptContext.SetReturnVector2D",   Native_ScriptContext_SetReturnFloatArray<2, &ScriptContext::SetReturnVector2D> },
 	{ "ScriptContext.SetReturnQuaternion", Native_ScriptContext_SetReturnFloatArray<4, &ScriptContext::SetReturnQuaternion> },
 	{ "ScriptContext.SetReturnHScript",    Native_ScriptContext_SetReturnHScript },
+	{ "ScriptContext.SetReturnEntity",     Native_ScriptContext_SetReturnEntity },
 	{ "ScriptContext.SetReturnNull",       Native_ScriptContext_SetReturnNull },
 	{ "ScriptContext.Entity.get",          Native_ScriptContext_Entity },
 	{ "ScriptContext.RaiseException",      Native_ScriptContext_RaiseException },
