@@ -241,7 +241,7 @@ public void OnPluginStart()
 
 void OnIgnite(ScriptContext context)
 {
-	int entity = VScript_HScriptToEntity(context.GetArgHScript(0));
+	int entity = context.GetArgEntity(0);
 	if (entity != -1)
 		IgniteEntity(entity, 10.0);
 }
