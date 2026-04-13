@@ -256,7 +256,7 @@ static cell_t Native_GetNumTableEntries(IPluginContext *pContext, const cell_t *
 }
 
 // native int ScriptHandle.GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &keyType, ScriptFieldType &fieldType);
-static cell_t Native_GetKeyValue(IPluginContext *pContext, const cell_t *params)
+static cell_t Native_GetNextKey(IPluginContext *pContext, const cell_t *params)
 {
 	IScriptVM *pVM = GetVMOrThrow(pContext);
 	if (!pVM) return -1;
@@ -276,11 +276,11 @@ static cell_t Native_GetKeyValue(IPluginContext *pContext, const cell_t *params)
 		pContext->LocalToString(params[3], &keyBuffer);
 		int keyMaxLen = params[4];
 
+		VariantMarshal::ReadVariantString(key, keyBuffer, keyMaxLen);
+
 		cell_t *pKeyType;
 		pContext->LocalToPhysAddr(params[5], &pKeyType);
 		*pKeyType = (cell_t)VariantMarshal::EngineToSPField(key.GetType());
-
-		VariantMarshal::ReadVariantString(key, keyBuffer, keyMaxLen);
 
 		cell_t *pFieldType;
 		pContext->LocalToPhysAddr(params[6], &pFieldType);
@@ -455,6 +455,56 @@ static cell_t Native_GetValueHScript(IPluginContext *pContext, const cell_t *par
 
 	// Ownership transferred to handle, do not call ReleaseValue
 	return (cell_t)CreateHScriptHandle(pContext, h, HScriptType::Table, HScriptOwnership::Owned);
+}
+
+// native int ScriptHandle.GetEntity(const char[] key);
+static cell_t Native_GetValueEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return -1;
+
+	HSCRIPT hScope;
+	if (!ReadHScriptParam(pContext, params[1], hScope))
+		return -1;
+
+	char *key;
+	pContext->LocalToString(params[2], &key);
+
+	ScriptVariant_t value;
+	if (!pVM->GetValue(hScope, key, &value))
+		return -1;
+
+	int result = -1;
+	int engineType = value.GetType();
+
+	if (engineType == FIELD_HSCRIPT)
+	{
+		HSCRIPT h = VariantMarshal::ReadVariantHScript(value);
+		if (h)
+		{
+			void *pInstance = pVM->GetInstanceValue(h, nullptr);
+			if (pInstance && g_VScriptExt.IsKnownEntity(pInstance))
+				result = gamehelpers->EntityToBCompatRef(static_cast<CBaseEntity *>(pInstance));
+		}
+	}
+	else if (engineType == FIELD_EHANDLE)
+	{
+		CBaseHandle handle = VariantMarshal::ReadVariantEHandle(value);
+		if (handle.IsValid())
+		{
+			int entIndex = handle.GetEntryIndex();
+			edict_t *pEdict = engine->PEntityOfEntIndex(entIndex);
+			if (pEdict && pEdict->m_NetworkSerialNumber == (handle.GetSerialNumber() & ((1 << NUM_NETWORKED_EHANDLE_SERIAL_NUMBER_BITS) - 1)))
+			{
+				CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(entIndex);
+				if (pEntity)
+					result = gamehelpers->EntityToBCompatRef(pEntity);
+			}
+		}
+	}
+
+	pVM->ReleaseValue(value);
+	return result;
 }
 
 // native bool ScriptHandle.SetInt(const char[] key, int value);
@@ -1458,6 +1508,7 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptHandle.GetVector2D",          Native_GetValueFloatArray<2, VariantMarshal::ReadVariantVector2D> },
 	{ "ScriptHandle.GetQuaternion",        Native_GetValueFloatArray<4, VariantMarshal::ReadVariantQuaternion> },
 	{ "ScriptHandle.GetHScript",           Native_GetValueHScript },
+	{ "ScriptHandle.GetEntity",            Native_GetValueEntity },
 	{ "ScriptHandle.SetInt",               Native_SetValueInt },
 	{ "ScriptHandle.SetFloat",             Native_SetValueFloat },
 	{ "ScriptHandle.SetBool",              Native_SetValueBool },
@@ -1468,7 +1519,7 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptHandle.SetHScript",           Native_SetValueHScript },
 	{ "ScriptHandle.SetNull",              Native_SetValueNull },
 	{ "ScriptHandle.Length.get",           Native_GetNumTableEntries },
-	{ "ScriptHandle.GetNextKey",           Native_GetKeyValue },
+	{ "ScriptHandle.GetNextKey",           Native_GetNextKey },
 	{ "ScriptHandle.LookupFunction",       Native_LookupFunction },
 
 	// ScriptCall methodmap

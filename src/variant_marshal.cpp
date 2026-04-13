@@ -20,6 +20,7 @@ int SPFieldToEngine(SPFieldType spType)
 		case SPFieldType::Vector2D:   return FIELD_VECTOR2D;
 		case SPFieldType::Quaternion: return FIELD_QUATERNION;
 		case SPFieldType::Variant:    return FIELD_VARIANT;
+		case SPFieldType::EHandle:    return FIELD_EHANDLE;
 		default:                      return FIELD_VOID;
 	}
 }
@@ -39,6 +40,7 @@ SPFieldType EngineToSPField(int engineType)
 		case FIELD_VECTOR2D:   return SPFieldType::Vector2D;
 		case FIELD_QUATERNION: return SPFieldType::Quaternion;
 		case FIELD_VARIANT:    return SPFieldType::Variant;
+		case FIELD_EHANDLE:    return SPFieldType::EHandle;
 		default:               return SPFieldType::Void;
 	}
 }
@@ -66,6 +68,11 @@ bool ReadVariantBool(const ScriptVariant_t &variant)
 HSCRIPT ReadVariantHScript(const ScriptVariant_t &variant)
 {
 	return variant.Get<HSCRIPT>();
+}
+
+CBaseHandle ReadVariantEHandle(const ScriptVariant_t &variant)
+{
+	return static_cast<CBaseHandle>(variant);
 }
 
 int ReadVariantString(const ScriptVariant_t &variant, char *buffer, int maxlen)

@@ -16,6 +16,7 @@ enum class SPFieldType : int
 	Vector2D,
 	Quaternion,
 	Variant,
+	EHandle,
 };
 
 namespace VariantMarshal
@@ -28,6 +29,7 @@ namespace VariantMarshal
 	float ReadVariantFloat(const ScriptVariant_t &variant);
 	bool ReadVariantBool(const ScriptVariant_t &variant);
 	HSCRIPT ReadVariantHScript(const ScriptVariant_t &variant);
+	CBaseHandle ReadVariantEHandle(const ScriptVariant_t &variant);
 	int ReadVariantString(const ScriptVariant_t &variant, char *buffer, int maxlen);
 	void ReadVariantVector(const ScriptVariant_t &variant, float vec[3]);
 	void ReadVariantVector2D(const ScriptVariant_t &variant, float vec[2]);

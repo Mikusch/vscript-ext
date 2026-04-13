@@ -32,6 +32,7 @@ enum ScriptFieldType
 	ScriptField_Vector2D,         /**< 2D vector (float[2]) */
 	ScriptField_Quaternion,       /**< Quaternion (float[4]) */
 	ScriptField_Variant,          /**< Any type (use GetArgType to determine) */
+	ScriptField_EHandle,          /**< Entity handle (EHANDLE) */
 };
 
 /**
@@ -139,6 +140,14 @@ methodmap ScriptHandle < Handle
 	public native ScriptHandle GetHScript(const char[] key);
 
 	/**
+	 * Gets an entity index from an HSCRIPT instance or EHANDLE value at the given key.
+	 *
+	 * @param key       The key name.
+	 * @return          Entity index, or -1 if invalid or not an entity.
+	 */
+	public native int GetEntity(const char[] key);
+
+	/**
 	 * Sets an integer value at the given key.
 	 *
 	 * @param key       The key name.
@@ -244,7 +253,7 @@ methodmap ScriptHandle < Handle
 	 * @param fieldType Output for the value's field type.
 	 * @return          Next iterator value, or -1 when iteration is complete.
 	 */
-	public native int GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &keyType, ScriptFieldType &fieldType);
+	public native int GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &keyType = ScriptField_Void, ScriptFieldType &fieldType = ScriptField_Void);
 
 	/**
 	 * Looks up a named function in this scope.
@@ -863,6 +872,7 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptHandle.GetVector2D");
 	MarkNativeAsOptional("ScriptHandle.GetQuaternion");
 	MarkNativeAsOptional("ScriptHandle.GetHScript");
+	MarkNativeAsOptional("ScriptHandle.GetEntity");
 	MarkNativeAsOptional("ScriptHandle.SetInt");
 	MarkNativeAsOptional("ScriptHandle.SetFloat");
 	MarkNativeAsOptional("ScriptHandle.SetBool");
