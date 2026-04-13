@@ -49,8 +49,7 @@ enum ScriptErrorLevel
 
 /**
  * Handle wrapping an HSCRIPT representing a scope, table, function, or class instance.
- * All ScriptHandles must be closed when no longer needed, except entity handles returned by
- * VScript_EntityToHScript and VScript_GetEntityScriptScope which are managed by the extension.
+ * All ScriptHandles must be closed when no longer needed, with some exceptions (read the function documentation).
  * All ScriptHandles become invalid after VM shutdown (map change).
  */
 methodmap ScriptHandle < Handle
@@ -474,8 +473,7 @@ methodmap ScriptCall < Handle
 	 * Executes the function in the root scope.
 	 *
 	 * @param ...       Variadic arguments matching the declared parameter types.
-	 *                  Additional arguments beyond the declared types can be passed
-	 *                  as alternating ScriptFieldType and value arguments.
+	 *                  Additional arguments beyond the declared types can be passed as alternating ScriptFieldType and value arguments.
 	 * @return          ScriptStatus_Done on success, ScriptStatus_Error on failure, or ScriptStatus_Running if the function yielded.
 	 * @error           Too few arguments, odd number of extra arguments, or function not found.
 	 */
@@ -486,8 +484,7 @@ methodmap ScriptCall < Handle
 	 *
 	 * @param scope     Scope to look up and execute the function in (e.g. entity script scope).
 	 * @param ...       Variadic arguments matching the declared parameter types.
-	 *                  Additional arguments beyond the declared types can be passed
-	 *                  as alternating ScriptFieldType and value arguments.
+	 *                  Additional arguments beyond the declared types can be passed as alternating ScriptFieldType and value arguments.
 	 * @return          ScriptStatus_Done on success, ScriptStatus_Error on failure, or ScriptStatus_Running if the function yielded.
 	 * @error           Too few arguments, odd number of extra arguments, or function not found.
 	 */
@@ -751,8 +748,8 @@ native bool VScript_UnregisterClassFunction(const char[] className, const char[]
  * @return          A ScriptHandle, or null if the entity has no scope.
  * @error           Invalid entity index.
  *
- * @note            The returned handle is managed by the extension and invalidated automatically
- *                  when the entity is destroyed or the VM shuts down. Do not close it.
+ * @note            The returned handle is managed by the extension and invalidated automatically when the entity is destroyed or the VM shuts down.
+ *                  Do not close it.
  */
 native ScriptHandle VScript_GetEntityScriptScope(int entity, bool create = false);
 
@@ -765,8 +762,8 @@ native ScriptHandle VScript_GetEntityScriptScope(int entity, bool create = false
  * @return          A ScriptHandle, or null if the entity has no VScript instance.
  * @error           Invalid entity index.
  *
- * @note            The returned handle is managed by the extension and invalidated automatically
- *                  when the entity is destroyed or the VM shuts down. Do not close it.
+ * @note            The returned handle is managed by the extension and invalidated automatically when the entity is destroyed or the VM shuts down.
+ *                  Do not close it.
  */
 native ScriptHandle VScript_EntityToHScript(int entity, bool create = false);
 
