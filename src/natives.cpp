@@ -1072,6 +1072,105 @@ static cell_t Native_ScriptCall_IsReturnNull(IPluginContext *pContext, const cel
 	return pCall->returnValue.IsNull();
 }
 
+// Entity script offset helpers
+
+static int s_offsetScriptScope = -1;     // m_ScriptScope
+static int s_offsetHScriptInstance = -1; // m_hScriptInstance
+
+static void FindEntityScriptOffsets()
+{
+	if (s_offsetScriptScope != -1)
+		return;
+
+	CBaseEntity *pWorld = gamehelpers->ReferenceToEntity(0);
+	if (!pWorld)
+		return;
+
+	datamap_t *pMap = gamehelpers->GetDataMap(pWorld);
+	if (!pMap)
+		return;
+
+	sm_datatable_info_t infoThink, infoId;
+	bool foundThink = gamehelpers->FindDataMapInfo(pMap, "m_iszScriptThinkFunction", &infoThink);
+	bool foundId = gamehelpers->FindDataMapInfo(pMap, "m_iszScriptId", &infoId);
+
+	if (foundThink && foundId)
+	{
+		int T = infoThink.actual_offset;
+		int S = infoId.actual_offset;
+
+		// m_ScriptScope starts after m_iszScriptThinkFunction, aligned to pointer size
+		int scopeOffset = (T + sizeof(string_t) + (sizeof(void *) - 1)) & ~(sizeof(void *) - 1);
+
+		// m_hScriptInstance is right before m_iszScriptId
+		int instanceOffset = S - sizeof(HSCRIPT);
+
+		if (instanceOffset - scopeOffset == sizeof(CScriptScope))
+		{
+			s_offsetScriptScope = scopeOffset;
+			s_offsetHScriptInstance = instanceOffset;
+		}
+	}
+}
+
+static HSCRIPT ReadEntityScriptScope(CBaseEntity *pEntity)
+{
+	return *(HSCRIPT *)((uint8_t *)pEntity + s_offsetScriptScope);
+}
+
+static HSCRIPT ReadEntityHScriptInstance(CBaseEntity *pEntity)
+{
+	return *(HSCRIPT *)((uint8_t *)pEntity + s_offsetHScriptInstance);
+}
+
+static HSCRIPT EnsureEntityScriptInstance(IScriptVM *pVM, CBaseEntity *pEntity)
+{
+	HSCRIPT hInstance = ReadEntityHScriptInstance(pEntity);
+	if (hInstance)
+		return hInstance;
+
+	HSCRIPT hFunc = VariantMarshal::LookupFunction(pVM, "EntIndexToHScript", nullptr);
+	if (!hFunc)
+		return nullptr;
+
+	int entindex = gamehelpers->ReferenceToIndex(gamehelpers->EntityToBCompatRef(pEntity));
+	ScriptVariant_t arg = entindex;
+	pVM->ExecuteFunction(hFunc, &arg, 1, nullptr, nullptr, true);
+	pVM->ReleaseFunction(hFunc);
+
+	// Don't use ExecuteFunction's return, its heap SQObject can't be kept or safely released.
+	// EntIndexToHScript sets m_hScriptInstance as a side effect, so read it directly.
+	return ReadEntityHScriptInstance(pEntity);
+}
+
+static HSCRIPT EnsureEntityScriptScope(IScriptVM *pVM, CBaseEntity *pEntity)
+{
+	HSCRIPT hScope = ReadEntityScriptScope(pEntity);
+	if (hScope && hScope != INVALID_HSCRIPT)
+		return hScope;
+
+	HSCRIPT hInstance = EnsureEntityScriptInstance(pVM, pEntity);
+	if (!hInstance)
+		return nullptr;
+
+	HSCRIPT hValidate = VariantMarshal::LookupFunction(pVM, "ValidateScriptScope", hInstance);
+	if (!hValidate)
+		return nullptr;
+
+	ScriptVariant_t ret;
+	pVM->ExecuteFunction(hValidate, nullptr, 0, &ret, hInstance, true);
+	pVM->ReleaseFunction(hValidate);
+
+	bool validated = (bool)ret;
+	pVM->ReleaseValue(ret);
+
+	if (!validated)
+		return nullptr;
+
+	hScope = ReadEntityScriptScope(pEntity);
+	return (hScope && hScope != INVALID_HSCRIPT) ? hScope : nullptr;
+}
+
 // ScriptContext methodmap (for VScript -> SP callbacks)
 static ScriptContext *ReadScriptContext(IPluginContext *pContext, Handle_t hndl)
 {
@@ -1321,103 +1420,6 @@ static cell_t Native_ScriptContext_Entity(IPluginContext *pContext, const cell_t
 	if (!pCtx) return -1;
 
 	return pCtx->GetCallerEntity();
-}
-
-static int s_offsetScriptScope = -1;     // m_ScriptScope
-static int s_offsetHScriptInstance = -1; // m_hScriptInstance
-
-static void FindEntityScriptOffsets()
-{
-	if (s_offsetScriptScope != -1)
-		return;
-
-	CBaseEntity *pWorld = gamehelpers->ReferenceToEntity(0);
-	if (!pWorld)
-		return;
-
-	datamap_t *pMap = gamehelpers->GetDataMap(pWorld);
-	if (!pMap)
-		return;
-
-	sm_datatable_info_t infoThink, infoId;
-	bool foundThink = gamehelpers->FindDataMapInfo(pMap, "m_iszScriptThinkFunction", &infoThink);
-	bool foundId = gamehelpers->FindDataMapInfo(pMap, "m_iszScriptId", &infoId);
-
-	if (foundThink && foundId)
-	{
-		int T = infoThink.actual_offset;
-		int S = infoId.actual_offset;
-
-		// m_ScriptScope starts after m_iszScriptThinkFunction, aligned to pointer size
-		int scopeOffset = (T + sizeof(string_t) + (sizeof(void *) - 1)) & ~(sizeof(void *) - 1);
-
-		// m_hScriptInstance is right before m_iszScriptId
-		int instanceOffset = S - sizeof(HSCRIPT);
-
-		if (instanceOffset - scopeOffset == sizeof(CScriptScope))
-		{
-			s_offsetScriptScope = scopeOffset;
-			s_offsetHScriptInstance = instanceOffset;
-		}
-	}
-}
-
-static HSCRIPT ReadEntityScriptScope(CBaseEntity *pEntity)
-{
-	return *(HSCRIPT *)((uint8_t *)pEntity + s_offsetScriptScope);
-}
-
-static HSCRIPT ReadEntityHScriptInstance(CBaseEntity *pEntity)
-{
-	return *(HSCRIPT *)((uint8_t *)pEntity + s_offsetHScriptInstance);
-}
-
-static HSCRIPT EnsureEntityScriptInstance(IScriptVM *pVM, CBaseEntity *pEntity)
-{
-	HSCRIPT hInstance = ReadEntityHScriptInstance(pEntity);
-	if (hInstance)
-		return hInstance;
-
-	HSCRIPT hFunc = VariantMarshal::LookupFunction(pVM, "EntIndexToHScript", nullptr);
-	if (!hFunc)
-		return nullptr;
-
-	int entindex = gamehelpers->ReferenceToIndex(gamehelpers->EntityToBCompatRef(pEntity));
-	ScriptVariant_t arg = entindex;
-	pVM->ExecuteFunction(hFunc, &arg, 1, nullptr, nullptr, true);
-	pVM->ReleaseFunction(hFunc);
-
-	// Don't use ExecuteFunction's return, its heap SQObject can't be kept or safely released.
-	// EntIndexToHScript sets m_hScriptInstance as a side effect, so read it directly.
-	return ReadEntityHScriptInstance(pEntity);
-}
-
-static HSCRIPT EnsureEntityScriptScope(IScriptVM *pVM, CBaseEntity *pEntity)
-{
-	HSCRIPT hScope = ReadEntityScriptScope(pEntity);
-	if (hScope && hScope != INVALID_HSCRIPT)
-		return hScope;
-
-	HSCRIPT hInstance = EnsureEntityScriptInstance(pVM, pEntity);
-	if (!hInstance)
-		return nullptr;
-
-	HSCRIPT hValidate = VariantMarshal::LookupFunction(pVM, "ValidateScriptScope", hInstance);
-	if (!hValidate)
-		return nullptr;
-
-	ScriptVariant_t ret;
-	pVM->ExecuteFunction(hValidate, nullptr, 0, &ret, hInstance, true);
-	pVM->ReleaseFunction(hValidate);
-
-	bool validated = (bool)ret;
-	pVM->ReleaseValue(ret);
-
-	if (!validated)
-		return nullptr;
-
-	hScope = ReadEntityScriptScope(pEntity);
-	return (hScope && hScope != INVALID_HSCRIPT) ? hScope : nullptr;
 }
 
 // native ScriptHandle VScript_EntityToHScript(int entity, bool create = false);
