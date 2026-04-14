@@ -209,13 +209,13 @@ void PrintTable(ScriptHandle table)
 		switch (iter.ValueType)
 		{
 			case ScriptField_Int:
-				PrintToServer("%s = %d", key, iter.GetInt());
+				PrintToServer("%s = %d", key, iter.GetValueInt());
 			case ScriptField_Float:
-				PrintToServer("%s = %f", key, iter.GetFloat());
+				PrintToServer("%s = %f", key, iter.GetValueFloat());
 			case ScriptField_String:
 			{
 				char val[256];
-				iter.GetString(val, sizeof(val));
+				iter.GetValueString(val, sizeof(val));
 				PrintToServer("%s = %s", key, val);
 			}
 		}
@@ -233,7 +233,7 @@ void SumArray(ScriptHandle arr)
 	ScriptIterator iter = arr.Iterate();
 	while (iter.Next())
 	{
-		sum += iter.GetInt();
+		sum += iter.GetValueInt();
 	}
 	delete iter;
 

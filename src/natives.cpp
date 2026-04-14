@@ -467,8 +467,8 @@ static cell_t Native_IterValueType(IPluginContext *pContext, const cell_t *param
 	return (cell_t)VariantMarshal::EngineToSPField(pIter->value.GetType());
 }
 
-// native int ScriptIterator.GetInt();
-static cell_t Native_IterGetInt(IPluginContext *pContext, const cell_t *params)
+// native int ScriptIterator.GetValueInt();
+static cell_t Native_IterGetValueInt(IPluginContext *pContext, const cell_t *params)
 {
 	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
 	if (!pIter) return 0;
@@ -482,8 +482,8 @@ static cell_t Native_IterGetInt(IPluginContext *pContext, const cell_t *params)
 	return VariantMarshal::ReadVariantInt(pIter->value);
 }
 
-// native bool ScriptIterator.GetBool();
-static cell_t Native_IterGetBool(IPluginContext *pContext, const cell_t *params)
+// native bool ScriptIterator.GetValueBool();
+static cell_t Native_IterGetValueBool(IPluginContext *pContext, const cell_t *params)
 {
 	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
 	if (!pIter) return 0;
@@ -497,8 +497,8 @@ static cell_t Native_IterGetBool(IPluginContext *pContext, const cell_t *params)
 	return VariantMarshal::ReadVariantBool(pIter->value);
 }
 
-// native float ScriptIterator.GetFloat();
-static cell_t Native_IterGetFloat(IPluginContext *pContext, const cell_t *params)
+// native float ScriptIterator.GetValueFloat();
+static cell_t Native_IterGetValueFloat(IPluginContext *pContext, const cell_t *params)
 {
 	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
 	if (!pIter) return 0;
@@ -512,8 +512,8 @@ static cell_t Native_IterGetFloat(IPluginContext *pContext, const cell_t *params
 	return sp_ftoc(VariantMarshal::ReadVariantFloat(pIter->value));
 }
 
-// native int ScriptIterator.GetString(char[] buffer, int maxlen);
-static cell_t Native_IterGetString(IPluginContext *pContext, const cell_t *params)
+// native int ScriptIterator.GetValueString(char[] buffer, int maxlen);
+static cell_t Native_IterGetValueString(IPluginContext *pContext, const cell_t *params)
 {
 	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
 	if (!pIter) return 0;
@@ -531,8 +531,8 @@ static cell_t Native_IterGetString(IPluginContext *pContext, const cell_t *param
 	return VariantMarshal::ReadVariantString(pIter->value, buffer, maxlen);
 }
 
-// native ScriptHandle ScriptIterator.GetHScript();
-static cell_t Native_IterGetHScript(IPluginContext *pContext, const cell_t *params)
+// native ScriptHandle ScriptIterator.GetValueHScript();
+static cell_t Native_IterGetValueHScript(IPluginContext *pContext, const cell_t *params)
 {
 	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
 	if (!pIter) return BAD_HANDLE;
@@ -552,8 +552,8 @@ static cell_t Native_IterGetHScript(IPluginContext *pContext, const cell_t *para
 	return (cell_t)CreateHScriptHandle(pContext, h, HScriptType::Table, HScriptOwnership::Owned);
 }
 
-// native int ScriptIterator.GetEntity();
-static cell_t Native_IterGetEntity(IPluginContext *pContext, const cell_t *params)
+// native int ScriptIterator.GetValueEntity();
+static cell_t Native_IterGetValueEntity(IPluginContext *pContext, const cell_t *params)
 {
 	IScriptVM *pVM = GetVMOrThrow(pContext);
 	if (!pVM) return -1;
@@ -571,7 +571,7 @@ static cell_t Native_IterGetEntity(IPluginContext *pContext, const cell_t *param
 }
 
 template <int N, void (*ReadFn)(const ScriptVariant_t &, float *)>
-static cell_t Native_IterGetFloatArray(IPluginContext *pContext, const cell_t *params)
+static cell_t Native_IterGetValueFloatArray(IPluginContext *pContext, const cell_t *params)
 {
 	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
 	if (!pIter) return 0;
@@ -1855,20 +1855,20 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptHandle.LookupFunction",       Native_LookupFunction },
 
 	// ScriptIterator methodmap
-	{ "ScriptIterator.Next",              Native_IterNext },
-	{ "ScriptIterator.GetKeyString",      Native_IterGetKeyString },
-	{ "ScriptIterator.GetKeyInt",         Native_IterGetKeyInt },
-	{ "ScriptIterator.KeyType.get",       Native_IterKeyType },
-	{ "ScriptIterator.ValueType.get",     Native_IterValueType },
-	{ "ScriptIterator.GetInt",            Native_IterGetInt },
-	{ "ScriptIterator.GetBool",           Native_IterGetBool },
-	{ "ScriptIterator.GetFloat",          Native_IterGetFloat },
-	{ "ScriptIterator.GetString",         Native_IterGetString },
-	{ "ScriptIterator.GetVector",         Native_IterGetFloatArray<3, VariantMarshal::ReadVariantVector> },
-	{ "ScriptIterator.GetVector2D",       Native_IterGetFloatArray<2, VariantMarshal::ReadVariantVector2D> },
-	{ "ScriptIterator.GetQuaternion",     Native_IterGetFloatArray<4, VariantMarshal::ReadVariantQuaternion> },
-	{ "ScriptIterator.GetHScript",        Native_IterGetHScript },
-	{ "ScriptIterator.GetEntity",         Native_IterGetEntity },
+	{ "ScriptIterator.Next",               Native_IterNext },
+	{ "ScriptIterator.GetKeyString",       Native_IterGetKeyString },
+	{ "ScriptIterator.GetKeyInt",          Native_IterGetKeyInt },
+	{ "ScriptIterator.KeyType.get",        Native_IterKeyType },
+	{ "ScriptIterator.ValueType.get",      Native_IterValueType },
+	{ "ScriptIterator.GetValueInt",        Native_IterGetValueInt },
+	{ "ScriptIterator.GetValueBool",       Native_IterGetValueBool },
+	{ "ScriptIterator.GetValueFloat",      Native_IterGetValueFloat },
+	{ "ScriptIterator.GetValueString",     Native_IterGetValueString },
+	{ "ScriptIterator.GetValueVector",     Native_IterGetValueFloatArray<3, VariantMarshal::ReadVariantVector> },
+	{ "ScriptIterator.GetValueVector2D",   Native_IterGetValueFloatArray<2, VariantMarshal::ReadVariantVector2D> },
+	{ "ScriptIterator.GetValueQuaternion", Native_IterGetValueFloatArray<4, VariantMarshal::ReadVariantQuaternion> },
+	{ "ScriptIterator.GetValueHScript",    Native_IterGetValueHScript },
+	{ "ScriptIterator.GetValueEntity",     Native_IterGetValueEntity },
 
 	// ScriptCall methodmap
 	{ "ScriptCall.ScriptCall",            Native_ScriptCall_Ctor },

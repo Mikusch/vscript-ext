@@ -104,7 +104,7 @@ methodmap ScriptIterator < Handle
 	 * @return          The integer value.
 	 * @error           Next() was not called or returned false.
 	 */
-	public native int GetInt();
+	public native int GetValueInt();
 
 	/**
 	 * Gets a boolean value at the current position.
@@ -112,7 +112,7 @@ methodmap ScriptIterator < Handle
 	 * @return          The boolean value.
 	 * @error           Next() was not called or returned false.
 	 */
-	public native bool GetBool();
+	public native bool GetValueBool();
 
 	/**
 	 * Gets a float value at the current position.
@@ -120,7 +120,7 @@ methodmap ScriptIterator < Handle
 	 * @return          The float value.
 	 * @error           Next() was not called or returned false.
 	 */
-	public native float GetFloat();
+	public native float GetValueFloat();
 
 	/**
 	 * Gets a string value at the current position.
@@ -130,7 +130,7 @@ methodmap ScriptIterator < Handle
 	 * @return          Number of bytes written.
 	 * @error           Next() was not called or returned false.
 	 */
-	public native int GetString(char[] buffer, int maxlen);
+	public native int GetValueString(char[] buffer, int maxlen);
 
 	/**
 	 * Gets a vector value at the current position.
@@ -138,7 +138,7 @@ methodmap ScriptIterator < Handle
 	 * @param vec       Array to store the vector.
 	 * @error           Next() was not called or returned false.
 	 */
-	public native void GetVector(float vec[3]);
+	public native void GetValueVector(float vec[3]);
 
 	/**
 	 * Gets a Vector2D value at the current position.
@@ -146,7 +146,7 @@ methodmap ScriptIterator < Handle
 	 * @param vec       Array to store the Vector2D.
 	 * @error           Next() was not called or returned false.
 	 */
-	public native void GetVector2D(float vec[2]);
+	public native void GetValueVector2D(float vec[2]);
 
 	/**
 	 * Gets a Quaternion value at the current position.
@@ -154,7 +154,7 @@ methodmap ScriptIterator < Handle
 	 * @param quat      Array to store the Quaternion.
 	 * @error           Next() was not called or returned false.
 	 */
-	public native void GetQuaternion(float quat[4]);
+	public native void GetValueQuaternion(float quat[4]);
 
 	/**
 	 * Gets an HSCRIPT value at the current position.
@@ -162,7 +162,7 @@ methodmap ScriptIterator < Handle
 	 * @return          A ScriptHandle, or null if not found. Must be closed with delete when done.
 	 * @error           Next() was not called or returned false.
 	 */
-	public native ScriptHandle GetHScript();
+	public native ScriptHandle GetValueHScript();
 
 	/**
 	 * Gets an entity index from an HSCRIPT instance or EHANDLE value at the current position.
@@ -170,7 +170,7 @@ methodmap ScriptIterator < Handle
 	 * @return          Entity index, or -1 if invalid or not an entity.
 	 * @error           Next() was not called or returned false.
 	 */
-	public native int GetEntity();
+	public native int GetValueEntity();
 };
 
 /**
@@ -1057,15 +1057,15 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptIterator.GetKeyInt");
 	MarkNativeAsOptional("ScriptIterator.KeyType.get");
 	MarkNativeAsOptional("ScriptIterator.ValueType.get");
-	MarkNativeAsOptional("ScriptIterator.GetInt");
-	MarkNativeAsOptional("ScriptIterator.GetBool");
-	MarkNativeAsOptional("ScriptIterator.GetFloat");
-	MarkNativeAsOptional("ScriptIterator.GetString");
-	MarkNativeAsOptional("ScriptIterator.GetVector");
-	MarkNativeAsOptional("ScriptIterator.GetVector2D");
-	MarkNativeAsOptional("ScriptIterator.GetQuaternion");
-	MarkNativeAsOptional("ScriptIterator.GetHScript");
-	MarkNativeAsOptional("ScriptIterator.GetEntity");
+	MarkNativeAsOptional("ScriptIterator.GetValueInt");
+	MarkNativeAsOptional("ScriptIterator.GetValueBool");
+	MarkNativeAsOptional("ScriptIterator.GetValueFloat");
+	MarkNativeAsOptional("ScriptIterator.GetValueString");
+	MarkNativeAsOptional("ScriptIterator.GetValueVector");
+	MarkNativeAsOptional("ScriptIterator.GetValueVector2D");
+	MarkNativeAsOptional("ScriptIterator.GetValueQuaternion");
+	MarkNativeAsOptional("ScriptIterator.GetValueHScript");
+	MarkNativeAsOptional("ScriptIterator.GetValueEntity");
 
 	// ScriptCall methodmap
 	MarkNativeAsOptional("ScriptCall.ScriptCall");
