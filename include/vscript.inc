@@ -49,131 +49,6 @@ enum ScriptErrorLevel
 // ============================================================================
 
 /**
- * Iterator for traversing key-value pairs in a table, scope, or array.
- */
-methodmap ScriptIterator < Handle
-{
-	/**
-	 * Advances to the next key-value pair.
-	 *
-	 * @return          True if a pair was found, false when iteration is complete.
-	 */
-	public native bool Next();
-
-	/**
-	 * Gets the key at the current position as a string.
-	 * For arrays, this is the string representation of the index.
-	 *
-	 * @param buffer    Buffer to store the key name.
-	 * @param maxlen    Maximum length of the buffer.
-	 * @return          Number of bytes written.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native int GetKeyString(char[] buffer, int maxlen);
-
-	/**
-	 * Gets the key at the current position as an integer.
-	 * For arrays, this is the element index.
-	 *
-	 * @return          The key as an integer.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native int GetKeyInt();
-
-	/**
-	 * The field type of the key at the current position.
-	 *
-	 * @error           Next() was not called or returned false.
-	 */
-	property ScriptFieldType KeyType {
-		public native get();
-	}
-
-	/**
-	 * The field type of the value at the current position.
-	 *
-	 * @error           Next() was not called or returned false.
-	 */
-	property ScriptFieldType ValueType {
-		public native get();
-	}
-
-	/**
-	 * Gets an integer value at the current position.
-	 *
-	 * @return          The integer value.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native int GetValueInt();
-
-	/**
-	 * Gets a boolean value at the current position.
-	 *
-	 * @return          The boolean value.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native bool GetValueBool();
-
-	/**
-	 * Gets a float value at the current position.
-	 *
-	 * @return          The float value.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native float GetValueFloat();
-
-	/**
-	 * Gets a string value at the current position.
-	 *
-	 * @param buffer    Buffer to store the string.
-	 * @param maxlen    Maximum length of the buffer.
-	 * @return          Number of bytes written.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native int GetValueString(char[] buffer, int maxlen);
-
-	/**
-	 * Gets a vector value at the current position.
-	 *
-	 * @param vec       Array to store the vector.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native void GetValueVector(float vec[3]);
-
-	/**
-	 * Gets a Vector2D value at the current position.
-	 *
-	 * @param vec       Array to store the Vector2D.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native void GetValueVector2D(float vec[2]);
-
-	/**
-	 * Gets a Quaternion value at the current position.
-	 *
-	 * @param quat      Array to store the Quaternion.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native void GetValueQuaternion(float quat[4]);
-
-	/**
-	 * Gets an HSCRIPT value at the current position.
-	 *
-	 * @return          A ScriptHandle, or null if not found. Must be closed with delete when done.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native ScriptHandle GetValueHScript();
-
-	/**
-	 * Gets an entity index from an HSCRIPT instance or EHANDLE value at the current position.
-	 *
-	 * @return          Entity index, or -1 if invalid or not an entity.
-	 * @error           Next() was not called or returned false.
-	 */
-	public native int GetValueEntity();
-};
-
-/**
  * Handle wrapping an HSCRIPT representing a scope, table, function, or class instance.
  * All ScriptHandles must be closed when no longer needed, with some exceptions (read the function documentation).
  * All ScriptHandles become invalid after VM shutdown (map change).
@@ -195,6 +70,13 @@ methodmap ScriptHandle < Handle
 	 * @return          True if the key exists.
 	 */
 	public native bool HasKey(const char[] key);
+
+	/**
+	 * Number of entries in this table or scope.
+	 */
+	property int Length {
+		public native get();
+	}
 
 	/**
 	 * Gets an integer value at the given key.
@@ -361,13 +243,6 @@ methodmap ScriptHandle < Handle
 	public native bool DeleteKey(const char[] key);
 
 	/**
-	 * Number of entries in this table or scope.
-	 */
-	property int Length {
-		public native get();
-	}
-
-	/**
 	 * Creates an iterator for traversing key-value pairs.
 	 * Works for tables, scopes, and arrays.
 	 *
@@ -409,21 +284,133 @@ methodmap ScriptHandle < Handle
  */
 public ScriptHandle ScriptRootTable;
 
+/**
+ * Iterator for traversing key-value pairs in a table, scope, or array.
+ */
+methodmap ScriptIterator < Handle
+{
+	/**
+	 * Advances to the next key-value pair.
+	 *
+	 * @return          True if a pair was found, false when iteration is complete.
+	 */
+	public native bool Next();
+
+	/**
+	 * The field type of the key at the current position.
+	 *
+	 * @error           Next() was not called or returned false.
+	 */
+	property ScriptFieldType KeyType {
+		public native get();
+	}
+
+	/**
+	 * Gets the key at the current position as a string.
+	 * For arrays, this is the string representation of the index.
+	 *
+	 * @param buffer    Buffer to store the key name.
+	 * @param maxlen    Maximum length of the buffer.
+	 * @return          Number of bytes written.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetKeyString(char[] buffer, int maxlen);
+
+	/**
+	 * Gets the key at the current position as an integer.
+	 * For arrays, this is the element index.
+	 *
+	 * @return          The key as an integer.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetKeyInt();
+
+	/**
+	 * The field type of the value at the current position.
+	 *
+	 * @error           Next() was not called or returned false.
+	 */
+	property ScriptFieldType ValueType {
+		public native get();
+	}
+
+	/**
+	 * Gets an integer value at the current position.
+	 *
+	 * @return          The integer value.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetValueInt();
+
+	/**
+	 * Gets a boolean value at the current position.
+	 *
+	 * @return          The boolean value.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native bool GetValueBool();
+
+	/**
+	 * Gets a float value at the current position.
+	 *
+	 * @return          The float value.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native float GetValueFloat();
+
+	/**
+	 * Gets a string value at the current position.
+	 *
+	 * @param buffer    Buffer to store the string.
+	 * @param maxlen    Maximum length of the buffer.
+	 * @return          Number of bytes written.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetValueString(char[] buffer, int maxlen);
+
+	/**
+	 * Gets a vector value at the current position.
+	 *
+	 * @param vec       Array to store the vector.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native void GetValueVector(float vec[3]);
+
+	/**
+	 * Gets a Vector2D value at the current position.
+	 *
+	 * @param vec       Array to store the Vector2D.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native void GetValueVector2D(float vec[2]);
+
+	/**
+	 * Gets a Quaternion value at the current position.
+	 *
+	 * @param quat      Array to store the Quaternion.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native void GetValueQuaternion(float quat[4]);
+
+	/**
+	 * Gets an HSCRIPT value at the current position.
+	 *
+	 * @return          A ScriptHandle, or null if not found. Must be closed with delete when done.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native ScriptHandle GetValueHScript();
+
+	/**
+	 * Gets an entity index from an HSCRIPT instance or EHANDLE value at the current position.
+	 *
+	 * @return          Entity index, or -1 if invalid or not an entity.
+	 * @error           Next() was not called or returned false.
+	 */
+	public native int GetValueEntity();
+};
+
 // ============================================================================
 // Callback types
-// ============================================================================
-
-/**
- * Callback signature for SourcePawn functions registered into VScript.
- *
- * @param context   Provides access to function arguments, return value, caller entity, and exception handling.
- *
- * @note            The ScriptContext handle is temporary and only valid during the callback.
- */
-typedef ScriptCallback = function void (ScriptContext context);
-
-// ============================================================================
-// Handles
 // ============================================================================
 
 /**
@@ -611,6 +598,15 @@ methodmap ScriptContext < Handle
 	 */
 	public native void RaiseException(const char[] format, any ...);
 };
+
+/**
+ * Callback signature for SourcePawn functions registered into VScript.
+ *
+ * @param context   Provides access to function arguments, return value, caller entity, and exception handling.
+ *
+ * @note            The ScriptContext handle is temporary and only valid during the callback.
+ */
+typedef ScriptCallback = function void (ScriptContext context);
 
 /**
  * Reusable setup handle for calling VScript functions from SourcePawn.
@@ -1027,6 +1023,7 @@ public void __ext_vscript_SetNTVOptional()
 	// ScriptHandle methodmap
 	MarkNativeAsOptional("ScriptHandle.GetType");
 	MarkNativeAsOptional("ScriptHandle.HasKey");
+	MarkNativeAsOptional("ScriptHandle.Length.get");
 	MarkNativeAsOptional("ScriptHandle.GetInt");
 	MarkNativeAsOptional("ScriptHandle.GetFloat");
 	MarkNativeAsOptional("ScriptHandle.GetBool");
@@ -1046,16 +1043,15 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptHandle.SetHScript");
 	MarkNativeAsOptional("ScriptHandle.SetNull");
 	MarkNativeAsOptional("ScriptHandle.DeleteKey");
-	MarkNativeAsOptional("ScriptHandle.Length.get");
-	MarkNativeAsOptional("ScriptHandle.GetNextKey");
 	MarkNativeAsOptional("ScriptHandle.Iterate");
+	MarkNativeAsOptional("ScriptHandle.GetNextKey");
 	MarkNativeAsOptional("ScriptHandle.LookupFunction");
 
 	// ScriptIterator methodmap
 	MarkNativeAsOptional("ScriptIterator.Next");
+	MarkNativeAsOptional("ScriptIterator.KeyType.get");
 	MarkNativeAsOptional("ScriptIterator.GetKeyString");
 	MarkNativeAsOptional("ScriptIterator.GetKeyInt");
-	MarkNativeAsOptional("ScriptIterator.KeyType.get");
 	MarkNativeAsOptional("ScriptIterator.ValueType.get");
 	MarkNativeAsOptional("ScriptIterator.GetValueInt");
 	MarkNativeAsOptional("ScriptIterator.GetValueBool");
@@ -1066,22 +1062,6 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptIterator.GetValueQuaternion");
 	MarkNativeAsOptional("ScriptIterator.GetValueHScript");
 	MarkNativeAsOptional("ScriptIterator.GetValueEntity");
-
-	// ScriptCall methodmap
-	MarkNativeAsOptional("ScriptCall.ScriptCall");
-	MarkNativeAsOptional("ScriptCall.Execute");
-	MarkNativeAsOptional("ScriptCall.ExecuteInScope");
-	MarkNativeAsOptional("ScriptCall.ReturnType.get");
-	MarkNativeAsOptional("ScriptCall.GetReturnInt");
-	MarkNativeAsOptional("ScriptCall.GetReturnFloat");
-	MarkNativeAsOptional("ScriptCall.GetReturnBool");
-	MarkNativeAsOptional("ScriptCall.GetReturnString");
-	MarkNativeAsOptional("ScriptCall.GetReturnVector");
-	MarkNativeAsOptional("ScriptCall.GetReturnVector2D");
-	MarkNativeAsOptional("ScriptCall.GetReturnQuaternion");
-	MarkNativeAsOptional("ScriptCall.GetReturnHScript");
-	MarkNativeAsOptional("ScriptCall.GetReturnEntity");
-	MarkNativeAsOptional("ScriptCall.IsReturnNull");
 
 	// ScriptContext methodmap
 	MarkNativeAsOptional("ScriptContext.ArgCount.get");
@@ -1107,5 +1087,21 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptContext.SetReturnEntity");
 	MarkNativeAsOptional("ScriptContext.SetReturnNull");
 	MarkNativeAsOptional("ScriptContext.RaiseException");
+
+	// ScriptCall methodmap
+	MarkNativeAsOptional("ScriptCall.ScriptCall");
+	MarkNativeAsOptional("ScriptCall.Execute");
+	MarkNativeAsOptional("ScriptCall.ExecuteInScope");
+	MarkNativeAsOptional("ScriptCall.ReturnType.get");
+	MarkNativeAsOptional("ScriptCall.GetReturnInt");
+	MarkNativeAsOptional("ScriptCall.GetReturnFloat");
+	MarkNativeAsOptional("ScriptCall.GetReturnBool");
+	MarkNativeAsOptional("ScriptCall.GetReturnString");
+	MarkNativeAsOptional("ScriptCall.GetReturnVector");
+	MarkNativeAsOptional("ScriptCall.GetReturnVector2D");
+	MarkNativeAsOptional("ScriptCall.GetReturnQuaternion");
+	MarkNativeAsOptional("ScriptCall.GetReturnHScript");
+	MarkNativeAsOptional("ScriptCall.GetReturnEntity");
+	MarkNativeAsOptional("ScriptCall.IsReturnNull");
 }
 #endif

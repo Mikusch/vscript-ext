@@ -144,6 +144,400 @@ static int VariantToEntityIndex(IScriptVM *pVM, const ScriptVariant_t &variant)
 	return -1;
 }
 
+
+// native bool VScript_IsVMInitialized();
+static cell_t Native_IsVMInitialized(IPluginContext *pContext, const cell_t *params)
+{
+	return g_VScriptExt.GetVM() != nullptr;
+}
+
+// native ScriptStatus VScript_Run(const char[] code, any ...);
+static cell_t Native_Run(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	if (params[0] > 1)
+	{
+		char buffer[4096];
+		smutils->FormatString(buffer, sizeof(buffer), pContext, params, 1);
+		return (cell_t)pVM->Run(buffer);
+	}
+
+	char *code;
+	pContext->LocalToString(params[1], &code);
+	return (cell_t)pVM->Run(code);
+}
+
+// native ScriptHandle VScript_CompileScript(const char[] code, const char[] id = "");
+static cell_t Native_CompileScript(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	char *code, *id;
+	pContext->LocalToString(params[1], &code);
+	pContext->LocalToString(params[2], &id);
+
+	HSCRIPT hScript = pVM->CompileScript(code, id[0] ? id : nullptr);
+	if (!hScript)
+		return BAD_HANDLE;
+
+	return (cell_t)CreateHScriptHandle(pContext, hScript, HScriptType::Script, HScriptOwnership::Owned);
+}
+
+// native ScriptStatus VScript_RunScript(ScriptHandle script, ScriptHandle scope);
+static cell_t Native_RunScript(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	HSCRIPT hScript;
+	if (!ReadHScriptParam(pContext, params[1], hScript))
+		return (cell_t)SCRIPT_ERROR;
+	if (!hScript)
+		return (cell_t)SCRIPT_ERROR;
+
+	HSCRIPT hScope;
+	if (!ReadHScriptParam(pContext, params[2], hScope))
+		return (cell_t)SCRIPT_ERROR;
+
+	return (cell_t)pVM->Run(hScript, hScope, true);
+}
+
+// native ScriptHandle VScript_CreateScope(const char[] name, ScriptHandle parent);
+static cell_t Native_CreateScope(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	char *name;
+	pContext->LocalToString(params[1], &name);
+
+	HSCRIPT hParent;
+	if (!ReadHScriptParam(pContext, params[2], hParent))
+		return 0;
+
+	HSCRIPT hScope = pVM->CreateScope(name, hParent);
+	if (!hScope)
+		return BAD_HANDLE;
+
+	return (cell_t)CreateHScriptHandle(pContext, hScope, HScriptType::Scope, HScriptOwnership::Owned);
+}
+
+// native ScriptHandle VScript_CreateTable();
+static cell_t Native_CreateTable(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	ScriptVariant_t table;
+	pVM->CreateTable(table);
+
+	HSCRIPT hTable = (HSCRIPT)table;
+	if (!hTable)
+		return BAD_HANDLE;
+
+	return (cell_t)CreateHScriptHandle(pContext, hTable, HScriptType::Table, HScriptOwnership::Owned);
+}
+
+// native bool VScript_RegisterFunction(const char[] name, ScriptCallback callback, const char[] description = "", ScriptFieldType returnType = ScriptField_Void, ScriptFieldType ...);
+static cell_t Native_RegisterFunction(IPluginContext *pContext, const cell_t *params)
+{
+	char *name, *description;
+	pContext->LocalToString(params[1], &name);
+
+	IPluginFunction *pCallback = pContext->GetFunctionById(params[2]);
+	if (!pCallback)
+		return pContext->ThrowNativeError("Invalid callback function");
+
+	pContext->LocalToString(params[3], &description);
+
+	if (!IsValidSPFieldType(params[4]))
+		return pContext->ThrowNativeError("Invalid return type %d", params[4]);
+	SPFieldType returnType = (SPFieldType)params[4];
+
+	int numParams = params[0] - 4;
+	std::vector<SPFieldType> paramTypes;
+	for (int i = 0; i < numParams; i++)
+	{
+		cell_t *addr;
+		pContext->LocalToPhysAddr(params[5 + i], &addr);
+		if (!IsValidSPFieldType(*addr))
+			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
+		paramTypes.push_back((SPFieldType)*addr);
+	}
+
+	RegisteredFunction *pReg = g_CallbackManager.RegisterFunction(
+		name, description, pCallback, returnType, paramTypes);
+
+	if (!pReg)
+		return pContext->ThrowNativeError("Failed to register VScript function '%s'", name);
+
+	return 1;
+}
+
+// native bool VScript_RegisterClassFunction(const char[] className, const char[] name, ScriptCallback callback, const char[] description = "", ScriptFieldType returnType = ScriptField_Void, ScriptFieldType ...);
+static cell_t Native_RegisterClassFunction(IPluginContext *pContext, const cell_t *params)
+{
+	char *className, *name, *description;
+	pContext->LocalToString(params[1], &className);
+	pContext->LocalToString(params[2], &name);
+
+	IPluginFunction *pCallback = pContext->GetFunctionById(params[3]);
+	if (!pCallback)
+		return pContext->ThrowNativeError("Invalid callback function");
+
+	pContext->LocalToString(params[4], &description);
+
+	if (!IsValidSPFieldType(params[5]))
+		return pContext->ThrowNativeError("Invalid return type %d", params[5]);
+	SPFieldType returnType = (SPFieldType)params[5];
+
+	int numParams = params[0] - 5;
+	std::vector<SPFieldType> paramTypes;
+	for (int i = 0; i < numParams; i++)
+	{
+		cell_t *addr;
+		pContext->LocalToPhysAddr(params[6 + i], &addr);
+		if (!IsValidSPFieldType(*addr))
+			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
+		paramTypes.push_back((SPFieldType)*addr);
+	}
+
+	RegisteredFunction *pReg = g_CallbackManager.RegisterClassFunction(
+		className, name, description, pCallback, returnType, paramTypes);
+
+	if (!pReg)
+		return pContext->ThrowNativeError("Failed to register class function '%s' on '%s'", name, className);
+
+	return 1;
+}
+
+// native bool VScript_UnregisterFunction(const char[] name);
+static cell_t Native_UnregisterFunction(IPluginContext *pContext, const cell_t *params)
+{
+	char *name;
+	pContext->LocalToString(params[1], &name);
+
+	return g_CallbackManager.UnregisterFunction(name);
+}
+
+// native bool VScript_UnregisterClassFunction(const char[] className, const char[] name);
+static cell_t Native_UnregisterClassFunction(IPluginContext *pContext, const cell_t *params)
+{
+	char *className, *name;
+	pContext->LocalToString(params[1], &className);
+	pContext->LocalToString(params[2], &name);
+
+	return g_CallbackManager.UnregisterClassFunction(className, name);
+}
+
+// Entity script offset helpers
+
+static int s_offsetScriptScope = -1;     // m_ScriptScope
+static int s_offsetHScriptInstance = -1; // m_hScriptInstance
+
+static void FindEntityScriptOffsets()
+{
+	if (s_offsetScriptScope != -1)
+		return;
+
+	CBaseEntity *pWorld = gamehelpers->ReferenceToEntity(0);
+	if (!pWorld)
+		return;
+
+	datamap_t *pMap = gamehelpers->GetDataMap(pWorld);
+	if (!pMap)
+		return;
+
+	sm_datatable_info_t infoThink, infoId;
+	bool foundThink = gamehelpers->FindDataMapInfo(pMap, "m_iszScriptThinkFunction", &infoThink);
+	bool foundId = gamehelpers->FindDataMapInfo(pMap, "m_iszScriptId", &infoId);
+
+	if (foundThink && foundId)
+	{
+		int T = infoThink.actual_offset;
+		int S = infoId.actual_offset;
+
+		// m_ScriptScope starts after m_iszScriptThinkFunction, aligned to pointer size
+		int scopeOffset = (T + sizeof(string_t) + (sizeof(void *) - 1)) & ~(sizeof(void *) - 1);
+
+		// m_hScriptInstance is right before m_iszScriptId
+		int instanceOffset = S - sizeof(HSCRIPT);
+
+		if (instanceOffset - scopeOffset == sizeof(CScriptScope))
+		{
+			s_offsetScriptScope = scopeOffset;
+			s_offsetHScriptInstance = instanceOffset;
+		}
+	}
+}
+
+static HSCRIPT ReadEntityScriptScope(CBaseEntity *pEntity)
+{
+	return *(HSCRIPT *)((uint8_t *)pEntity + s_offsetScriptScope);
+}
+
+static HSCRIPT ReadEntityHScriptInstance(CBaseEntity *pEntity)
+{
+	return *(HSCRIPT *)((uint8_t *)pEntity + s_offsetHScriptInstance);
+}
+
+static HSCRIPT EnsureEntityScriptInstance(IScriptVM *pVM, CBaseEntity *pEntity)
+{
+	HSCRIPT hInstance = ReadEntityHScriptInstance(pEntity);
+	if (hInstance)
+		return hInstance;
+
+	HSCRIPT hFunc = VariantMarshal::LookupFunction(pVM, "EntIndexToHScript", nullptr);
+	if (!hFunc)
+		return nullptr;
+
+	int entindex = gamehelpers->ReferenceToIndex(gamehelpers->EntityToBCompatRef(pEntity));
+	ScriptVariant_t arg = entindex;
+	pVM->ExecuteFunction(hFunc, &arg, 1, nullptr, nullptr, true);
+	pVM->ReleaseFunction(hFunc);
+
+	// Don't use ExecuteFunction's return, its heap SQObject can't be kept or safely released.
+	// EntIndexToHScript sets m_hScriptInstance as a side effect, so read it directly.
+	return ReadEntityHScriptInstance(pEntity);
+}
+
+static HSCRIPT EnsureEntityScriptScope(IScriptVM *pVM, CBaseEntity *pEntity)
+{
+	HSCRIPT hScope = ReadEntityScriptScope(pEntity);
+	if (hScope && hScope != INVALID_HSCRIPT)
+		return hScope;
+
+	HSCRIPT hInstance = EnsureEntityScriptInstance(pVM, pEntity);
+	if (!hInstance)
+		return nullptr;
+
+	HSCRIPT hValidate = VariantMarshal::LookupFunction(pVM, "ValidateScriptScope", hInstance);
+	if (!hValidate)
+		return nullptr;
+
+	ScriptVariant_t ret;
+	pVM->ExecuteFunction(hValidate, nullptr, 0, &ret, hInstance, true);
+	pVM->ReleaseFunction(hValidate);
+
+	bool validated = (bool)ret;
+	pVM->ReleaseValue(ret);
+
+	if (!validated)
+		return nullptr;
+
+	hScope = ReadEntityScriptScope(pEntity);
+	return (hScope && hScope != INVALID_HSCRIPT) ? hScope : nullptr;
+}
+
+// native ScriptHandle VScript_GetEntityScriptScope(int entity, bool create = false);
+static cell_t Native_GetEntityScriptScope(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	FindEntityScriptOffsets();
+	if (s_offsetScriptScope == -1)
+		return pContext->ThrowNativeError("Could not find entity script scope offset");
+
+	CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(params[1]);
+	if (!pEntity)
+		return pContext->ThrowNativeError("Invalid entity index %d", params[1]);
+
+	HSCRIPT hScope;
+	if (params[2])
+		hScope = EnsureEntityScriptScope(pVM, pEntity);
+	else
+	{
+		hScope = ReadEntityScriptScope(pEntity);
+		if (!hScope || hScope == INVALID_HSCRIPT)
+			return BAD_HANDLE;
+	}
+
+	if (!hScope)
+		return BAD_HANDLE;
+
+	return (cell_t)g_VScriptExt.GetOrCreateCachedEntityHandle(pEntity, hScope, HScriptType::Scope);
+}
+
+// native ScriptHandle VScript_EntityToHScript(int entity, bool create = false);
+static cell_t Native_EntityToHScript(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	FindEntityScriptOffsets();
+	if (s_offsetHScriptInstance == -1)
+		return pContext->ThrowNativeError("Could not find entity hscript instance offset");
+
+	CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(params[1]);
+	if (!pEntity)
+		return pContext->ThrowNativeError("Invalid entity index %d", params[1]);
+
+	HSCRIPT hInstance;
+	if (params[2])
+		hInstance = EnsureEntityScriptInstance(pVM, pEntity);
+	else
+	{
+		hInstance = ReadEntityHScriptInstance(pEntity);
+		if (!hInstance)
+			return BAD_HANDLE;
+	}
+
+	if (!hInstance)
+		return BAD_HANDLE;
+
+	return (cell_t)g_VScriptExt.GetOrCreateCachedEntityHandle(pEntity, hInstance, HScriptType::Value);
+}
+
+// native int VScript_HScriptToEntity(ScriptHandle hscript);
+static cell_t Native_HScriptToEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return -1;
+
+	HSCRIPT h;
+	if (!ReadHScriptParam(pContext, params[1], h))
+		return -1;
+	if (!h)
+		return -1;
+
+	return HScriptToEntityIndex(pVM, h);
+}
+
+// native bool VScript_GenerateUniqueKey(const char[] root, char[] buffer, int maxlen);
+static cell_t Native_GenerateUniqueKey(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	char *root;
+	pContext->LocalToString(params[1], &root);
+
+	char *buffer;
+	pContext->LocalToString(params[2], &buffer);
+	int maxlen = params[3];
+
+	return pVM->GenerateUniqueKey(root, buffer, maxlen);
+}
+
+// native void VScript_AddSearchPath(const char[] path);
+static cell_t Native_AddSearchPath(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	char *path;
+	pContext->LocalToString(params[1], &path);
+
+	pVM->AddSearchPath(path);
+	return 0;
+}
+
+// ScriptHandle methodmap
+
 template <int N, void (*ReadFn)(const ScriptVariant_t &, float *)>
 static cell_t Native_GetValueFloatArray(IPluginContext *pContext, const cell_t *params)
 {
@@ -198,430 +592,6 @@ static cell_t Native_SetValueFloatArray(IPluginContext *pContext, const cell_t *
 	return result;
 }
 
-
-// native bool VScript_IsVMInitialized();
-static cell_t Native_IsVMInitialized(IPluginContext *pContext, const cell_t *params)
-{
-	return g_VScriptExt.GetVM() != nullptr;
-}
-
-// native ScriptStatus VScript_Run(const char[] code, any ...);
-static cell_t Native_Run(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	if (params[0] > 1)
-	{
-		char buffer[4096];
-		smutils->FormatString(buffer, sizeof(buffer), pContext, params, 1);
-		return (cell_t)pVM->Run(buffer);
-	}
-
-	char *code;
-	pContext->LocalToString(params[1], &code);
-	return (cell_t)pVM->Run(code);
-}
-
-// Compilation
-// native ScriptHandle VScript_CompileScript(const char[] code, const char[] id = "");
-static cell_t Native_CompileScript(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	char *code, *id;
-	pContext->LocalToString(params[1], &code);
-	pContext->LocalToString(params[2], &id);
-
-	HSCRIPT hScript = pVM->CompileScript(code, id[0] ? id : nullptr);
-	if (!hScript)
-		return BAD_HANDLE;
-
-	return (cell_t)CreateHScriptHandle(pContext, hScript, HScriptType::Script, HScriptOwnership::Owned);
-}
-
-// native ScriptStatus VScript_RunScript(ScriptHandle script, ScriptHandle scope);
-static cell_t Native_RunScript(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	HSCRIPT hScript;
-	if (!ReadHScriptParam(pContext, params[1], hScript))
-		return (cell_t)SCRIPT_ERROR;
-	if (!hScript)
-		return (cell_t)SCRIPT_ERROR;
-
-	HSCRIPT hScope;
-	if (!ReadHScriptParam(pContext, params[2], hScope))
-		return (cell_t)SCRIPT_ERROR;
-
-	return (cell_t)pVM->Run(hScript, hScope, true);
-}
-
-// Scopes and Tables
-// native ScriptHandle VScript_CreateScope(const char[] name, ScriptHandle parent);
-static cell_t Native_CreateScope(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	char *name;
-	pContext->LocalToString(params[1], &name);
-
-	HSCRIPT hParent;
-	if (!ReadHScriptParam(pContext, params[2], hParent))
-		return 0;
-
-	HSCRIPT hScope = pVM->CreateScope(name, hParent);
-	if (!hScope)
-		return BAD_HANDLE;
-
-	return (cell_t)CreateHScriptHandle(pContext, hScope, HScriptType::Scope, HScriptOwnership::Owned);
-}
-
-// native ScriptHandle VScript_CreateTable();
-static cell_t Native_CreateTable(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	ScriptVariant_t table;
-	pVM->CreateTable(table);
-
-	HSCRIPT hTable = (HSCRIPT)table;
-	if (!hTable)
-		return BAD_HANDLE;
-
-	return (cell_t)CreateHScriptHandle(pContext, hTable, HScriptType::Table, HScriptOwnership::Owned);
-}
-
-// ScriptHandle methodmap
-
-// native int ScriptHandle.Length.get();
-static cell_t Native_GetNumTableEntries(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	HSCRIPT hScope;
-	if (!ReadHScriptParam(pContext, params[1], hScope))
-		return 0;
-	return pVM->GetNumTableEntries(hScope);
-}
-
-// native int ScriptHandle.GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &keyType, ScriptFieldType &fieldType);
-static cell_t Native_GetNextKey(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return -1;
-
-	HSCRIPT hScope;
-	if (!ReadHScriptParam(pContext, params[1], hScope))
-		return -1;
-
-	int iterator = params[2];
-	ScriptVariant_t key, value;
-
-	int next = pVM->GetKeyValue(hScope, iterator, &key, &value);
-
-	if (next != -1)
-	{
-		char *keyBuffer;
-		pContext->LocalToString(params[3], &keyBuffer);
-		int keyMaxLen = params[4];
-
-		VariantMarshal::ReadVariantString(key, keyBuffer, keyMaxLen);
-
-		cell_t *pKeyType;
-		pContext->LocalToPhysAddr(params[5], &pKeyType);
-		*pKeyType = (cell_t)VariantMarshal::EngineToSPField(key.GetType());
-
-		cell_t *pFieldType;
-		pContext->LocalToPhysAddr(params[6], &pFieldType);
-		*pFieldType = (cell_t)VariantMarshal::EngineToSPField(value.GetType());
-
-		pVM->ReleaseValue(key);
-		pVM->ReleaseValue(value);
-	}
-
-	return next;
-}
-
-// ScriptIterator
-
-// native ScriptIterator ScriptHandle.Iterate();
-static cell_t Native_Iterate(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return BAD_HANDLE;
-
-	HSCRIPT hScope;
-	if (!ReadHScriptParam(pContext, params[1], hScope))
-		return BAD_HANDLE;
-
-	ScriptIteratorState *pIter = new ScriptIteratorState(hScope, g_vmGeneration);
-
-	Handle_t hndl = handlesys->CreateHandle(
-		g_VScriptExt.GetScriptIteratorHandleType(),
-		pIter,
-		pContext->GetIdentity(),
-		myself->GetIdentity(),
-		nullptr);
-
-	if (hndl == BAD_HANDLE)
-	{
-		delete pIter;
-		return BAD_HANDLE;
-	}
-
-	return (cell_t)hndl;
-}
-
-// native bool ScriptIterator.Next();
-static cell_t Native_IterNext(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	pIter->ReleaseCurrentValues();
-
-	ScriptVariant_t key, value;
-	int next = pVM->GetKeyValue(pIter->hScope, pIter->nextIterator, &key, &value);
-
-	if (next == -1)
-		return 0;
-
-	pIter->key = key;
-	pIter->value = value;
-	pIter->hasValue = true;
-	pIter->nextIterator = next;
-	return 1;
-}
-
-// native int ScriptIterator.GetKeyString(char[] buffer, int maxlen);
-static cell_t Native_IterGetKeyString(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return 0;
-	}
-
-	char *buffer;
-	pContext->LocalToString(params[2], &buffer);
-	int maxlen = params[3];
-
-	return VariantMarshal::ReadVariantString(pIter->key, buffer, maxlen);
-}
-
-// native int ScriptIterator.GetKeyInt();
-static cell_t Native_IterGetKeyInt(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return 0;
-	}
-
-	return VariantMarshal::ReadVariantInt(pIter->key);
-}
-
-// native ScriptFieldType ScriptIterator.KeyType.get();
-static cell_t Native_IterKeyType(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return 0;
-	}
-
-	return (cell_t)VariantMarshal::EngineToSPField(pIter->key.GetType());
-}
-
-// native ScriptFieldType ScriptIterator.ValueType.get();
-static cell_t Native_IterValueType(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return 0;
-	}
-
-	return (cell_t)VariantMarshal::EngineToSPField(pIter->value.GetType());
-}
-
-// native int ScriptIterator.GetValueInt();
-static cell_t Native_IterGetValueInt(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return 0;
-	}
-
-	return VariantMarshal::ReadVariantInt(pIter->value);
-}
-
-// native bool ScriptIterator.GetValueBool();
-static cell_t Native_IterGetValueBool(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return 0;
-	}
-
-	return VariantMarshal::ReadVariantBool(pIter->value);
-}
-
-// native float ScriptIterator.GetValueFloat();
-static cell_t Native_IterGetValueFloat(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return 0;
-	}
-
-	return sp_ftoc(VariantMarshal::ReadVariantFloat(pIter->value));
-}
-
-// native int ScriptIterator.GetValueString(char[] buffer, int maxlen);
-static cell_t Native_IterGetValueString(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return 0;
-	}
-
-	char *buffer;
-	pContext->LocalToString(params[2], &buffer);
-	int maxlen = params[3];
-
-	return VariantMarshal::ReadVariantString(pIter->value, buffer, maxlen);
-}
-
-// native ScriptHandle ScriptIterator.GetValueHScript();
-static cell_t Native_IterGetValueHScript(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return BAD_HANDLE;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return BAD_HANDLE;
-	}
-
-	HSCRIPT h = VariantMarshal::ReadVariantHScript(pIter->value);
-	if (!h)
-		return BAD_HANDLE;
-
-	pIter->value = ScriptVariant_t();
-
-	return (cell_t)CreateHScriptHandle(pContext, h, HScriptType::Table, HScriptOwnership::Owned);
-}
-
-// native int ScriptIterator.GetValueEntity();
-static cell_t Native_IterGetValueEntity(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return -1;
-
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return -1;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return -1;
-	}
-
-	return VariantToEntityIndex(pVM, pIter->value);
-}
-
-template <int N, void (*ReadFn)(const ScriptVariant_t &, float *)>
-static cell_t Native_IterGetValueFloatArray(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
-	if (!pIter) return 0;
-
-	if (!pIter->hasValue)
-	{
-		pContext->ThrowNativeError("No iteration value available (call Next() first)");
-		return 0;
-	}
-
-	cell_t *out;
-	pContext->LocalToPhysAddr(params[2], &out);
-
-	float fbuf[N];
-	ReadFn(pIter->value, fbuf);
-	FloatsToCells<N>(fbuf, out);
-	return 0;
-}
-
-// native bool ScriptHandle.HasKey(const char[] key);
-static cell_t Native_ValueExists(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-	HSCRIPT hScope;
-	if (!ReadHScriptParam(pContext, params[1], hScope))
-		return 0;
-	char *key;
-	pContext->LocalToString(params[2], &key);
-	return pVM->ValueExists(hScope, key);
-}
-
-// native bool ScriptHandle.DeleteKey(const char[] key);
-static cell_t Native_ClearValue(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-	HSCRIPT hScope;
-	if (!ReadHScriptParam(pContext, params[1], hScope))
-		return 0;
-	char *key;
-	pContext->LocalToString(params[2], &key);
-
-	if (!pVM->ValueExists(hScope, key))
-		return 0;
-
-	pVM->ClearValue(hScope, key);
-	return 1;
-}
-
 // native ScriptFieldType ScriptHandle.GetType(const char[] key);
 static cell_t Native_GetValueType(IPluginContext *pContext, const cell_t *params)
 {
@@ -640,6 +610,31 @@ static cell_t Native_GetValueType(IPluginContext *pContext, const cell_t *params
 	SPFieldType type = VariantMarshal::ReadVariantType(value);
 	pVM->ReleaseValue(value);
 	return (cell_t)type;
+}
+
+// native bool ScriptHandle.HasKey(const char[] key);
+static cell_t Native_ValueExists(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+	HSCRIPT hScope;
+	if (!ReadHScriptParam(pContext, params[1], hScope))
+		return 0;
+	char *key;
+	pContext->LocalToString(params[2], &key);
+	return pVM->ValueExists(hScope, key);
+}
+
+// native int ScriptHandle.Length.get();
+static cell_t Native_GetNumTableEntries(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	HSCRIPT hScope;
+	if (!ReadHScriptParam(pContext, params[1], hScope))
+		return 0;
+	return pVM->GetNumTableEntries(hScope);
 }
 
 // native int ScriptHandle.GetInt(const char[] key);
@@ -662,26 +657,6 @@ static cell_t Native_GetValueInt(IPluginContext *pContext, const cell_t *params)
 	return result;
 }
 
-// native bool ScriptHandle.GetBool(const char[] key);
-static cell_t Native_GetValueBool(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-	HSCRIPT hScope;
-	if (!ReadHScriptParam(pContext, params[1], hScope))
-		return 0;
-	char *key;
-	pContext->LocalToString(params[2], &key);
-
-	ScriptVariant_t value;
-	if (!pVM->GetValue(hScope, key, &value))
-		return 0;
-
-	cell_t result = VariantMarshal::ReadVariantBool(value);
-	pVM->ReleaseValue(value);
-	return result;
-}
-
 // native float ScriptHandle.GetFloat(const char[] key);
 static cell_t Native_GetValueFloat(IPluginContext *pContext, const cell_t *params)
 {
@@ -700,6 +675,26 @@ static cell_t Native_GetValueFloat(IPluginContext *pContext, const cell_t *param
 	float result = VariantMarshal::ReadVariantFloat(value);
 	pVM->ReleaseValue(value);
 	return sp_ftoc(result);
+}
+
+// native bool ScriptHandle.GetBool(const char[] key);
+static cell_t Native_GetValueBool(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+	HSCRIPT hScope;
+	if (!ReadHScriptParam(pContext, params[1], hScope))
+		return 0;
+	char *key;
+	pContext->LocalToString(params[2], &key);
+
+	ScriptVariant_t value;
+	if (!pVM->GetValue(hScope, key, &value))
+		return 0;
+
+	cell_t result = VariantMarshal::ReadVariantBool(value);
+	pVM->ReleaseValue(value);
+	return result;
 }
 
 // native int ScriptHandle.GetString(const char[] key, char[] buffer, int maxlen);
@@ -875,6 +870,90 @@ static cell_t Native_SetValueNull(IPluginContext *pContext, const cell_t *params
 	return pVM->SetValue(hScope, key, variant);
 }
 
+// native bool ScriptHandle.DeleteKey(const char[] key);
+static cell_t Native_ClearValue(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+	HSCRIPT hScope;
+	if (!ReadHScriptParam(pContext, params[1], hScope))
+		return 0;
+	char *key;
+	pContext->LocalToString(params[2], &key);
+
+	if (!pVM->ValueExists(hScope, key))
+		return 0;
+
+	pVM->ClearValue(hScope, key);
+	return 1;
+}
+
+// native ScriptIterator ScriptHandle.Iterate();
+static cell_t Native_Iterate(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return BAD_HANDLE;
+
+	HSCRIPT hScope;
+	if (!ReadHScriptParam(pContext, params[1], hScope))
+		return BAD_HANDLE;
+
+	ScriptIteratorState *pIter = new ScriptIteratorState(hScope, g_vmGeneration);
+
+	Handle_t hndl = handlesys->CreateHandle(
+		g_VScriptExt.GetScriptIteratorHandleType(),
+		pIter,
+		pContext->GetIdentity(),
+		myself->GetIdentity(),
+		nullptr);
+
+	if (hndl == BAD_HANDLE)
+	{
+		delete pIter;
+		return BAD_HANDLE;
+	}
+
+	return (cell_t)hndl;
+}
+
+// native int ScriptHandle.GetNextKey(int iterator, char[] keyBuffer, int keyMaxLen, ScriptFieldType &keyType, ScriptFieldType &fieldType);
+static cell_t Native_GetNextKey(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return -1;
+
+	HSCRIPT hScope;
+	if (!ReadHScriptParam(pContext, params[1], hScope))
+		return -1;
+
+	int iterator = params[2];
+	ScriptVariant_t key, value;
+
+	int next = pVM->GetKeyValue(hScope, iterator, &key, &value);
+
+	if (next != -1)
+	{
+		char *keyBuffer;
+		pContext->LocalToString(params[3], &keyBuffer);
+		int keyMaxLen = params[4];
+
+		VariantMarshal::ReadVariantString(key, keyBuffer, keyMaxLen);
+
+		cell_t *pKeyType;
+		pContext->LocalToPhysAddr(params[5], &pKeyType);
+		*pKeyType = (cell_t)VariantMarshal::EngineToSPField(key.GetType());
+
+		cell_t *pFieldType;
+		pContext->LocalToPhysAddr(params[6], &pFieldType);
+		*pFieldType = (cell_t)VariantMarshal::EngineToSPField(value.GetType());
+
+		pVM->ReleaseValue(key);
+		pVM->ReleaseValue(value);
+	}
+
+	return next;
+}
+
 // native ScriptHandle ScriptHandle.LookupFunction(const char[] name);
 static cell_t Native_LookupFunction(IPluginContext *pContext, const cell_t *params)
 {
@@ -896,98 +975,484 @@ static cell_t Native_LookupFunction(IPluginContext *pContext, const cell_t *para
 	return (cell_t)CreateHScriptHandle(pContext, hFunc, HScriptType::Function, HScriptOwnership::Owned);
 }
 
-// Function registration
+// ScriptIterator methodmap
 
-// native bool VScript_RegisterFunction(const char[] name, ScriptCallback callback, const char[] description = "", ScriptFieldType returnType = ScriptField_Void, ScriptFieldType ...);
-static cell_t Native_RegisterFunction(IPluginContext *pContext, const cell_t *params)
+template <int N, void (*ReadFn)(const ScriptVariant_t &, float *)>
+static cell_t Native_IterGetValueFloatArray(IPluginContext *pContext, const cell_t *params)
 {
-	char *name, *description;
-	pContext->LocalToString(params[1], &name);
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
 
-	IPluginFunction *pCallback = pContext->GetFunctionById(params[2]);
-	if (!pCallback)
-		return pContext->ThrowNativeError("Invalid callback function");
-
-	pContext->LocalToString(params[3], &description);
-
-	if (!IsValidSPFieldType(params[4]))
-		return pContext->ThrowNativeError("Invalid return type %d", params[4]);
-	SPFieldType returnType = (SPFieldType)params[4];
-
-	int numParams = params[0] - 4;
-	std::vector<SPFieldType> paramTypes;
-	for (int i = 0; i < numParams; i++)
+	if (!pIter->hasValue)
 	{
-		cell_t *addr;
-		pContext->LocalToPhysAddr(params[5 + i], &addr);
-		if (!IsValidSPFieldType(*addr))
-			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
-		paramTypes.push_back((SPFieldType)*addr);
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return 0;
 	}
 
-	RegisteredFunction *pReg = g_CallbackManager.RegisterFunction(
-		name, description, pCallback, returnType, paramTypes);
+	cell_t *out;
+	pContext->LocalToPhysAddr(params[2], &out);
 
-	if (!pReg)
-		return pContext->ThrowNativeError("Failed to register VScript function '%s'", name);
+	float fbuf[N];
+	ReadFn(pIter->value, fbuf);
+	FloatsToCells<N>(fbuf, out);
+	return 0;
+}
 
+// native bool ScriptIterator.Next();
+static cell_t Native_IterNext(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
+
+	pIter->ReleaseCurrentValues();
+
+	ScriptVariant_t key, value;
+	int next = pVM->GetKeyValue(pIter->hScope, pIter->nextIterator, &key, &value);
+
+	if (next == -1)
+		return 0;
+
+	pIter->key = key;
+	pIter->value = value;
+	pIter->hasValue = true;
+	pIter->nextIterator = next;
 	return 1;
 }
 
-// native bool VScript_RegisterClassFunction(const char[] className, const char[] name, ScriptCallback callback, const char[] description = "", ScriptFieldType returnType = ScriptField_Void, ScriptFieldType ...);
-static cell_t Native_RegisterClassFunction(IPluginContext *pContext, const cell_t *params)
+// native ScriptFieldType ScriptIterator.KeyType.get();
+static cell_t Native_IterKeyType(IPluginContext *pContext, const cell_t *params)
 {
-	char *className, *name, *description;
-	pContext->LocalToString(params[1], &className);
-	pContext->LocalToString(params[2], &name);
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
 
-	IPluginFunction *pCallback = pContext->GetFunctionById(params[3]);
-	if (!pCallback)
-		return pContext->ThrowNativeError("Invalid callback function");
-
-	pContext->LocalToString(params[4], &description);
-
-	if (!IsValidSPFieldType(params[5]))
-		return pContext->ThrowNativeError("Invalid return type %d", params[5]);
-	SPFieldType returnType = (SPFieldType)params[5];
-
-	int numParams = params[0] - 5;
-	std::vector<SPFieldType> paramTypes;
-	for (int i = 0; i < numParams; i++)
+	if (!pIter->hasValue)
 	{
-		cell_t *addr;
-		pContext->LocalToPhysAddr(params[6 + i], &addr);
-		if (!IsValidSPFieldType(*addr))
-			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
-		paramTypes.push_back((SPFieldType)*addr);
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return 0;
 	}
 
-	RegisteredFunction *pReg = g_CallbackManager.RegisterClassFunction(
-		className, name, description, pCallback, returnType, paramTypes);
-
-	if (!pReg)
-		return pContext->ThrowNativeError("Failed to register class function '%s' on '%s'", name, className);
-
-	return 1;
+	return (cell_t)VariantMarshal::EngineToSPField(pIter->key.GetType());
 }
 
-// native bool VScript_UnregisterFunction(const char[] name);
-static cell_t Native_UnregisterFunction(IPluginContext *pContext, const cell_t *params)
+// native int ScriptIterator.GetKeyString(char[] buffer, int maxlen);
+static cell_t Native_IterGetKeyString(IPluginContext *pContext, const cell_t *params)
 {
-	char *name;
-	pContext->LocalToString(params[1], &name);
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
 
-	return g_CallbackManager.UnregisterFunction(name);
+	if (!pIter->hasValue)
+	{
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return 0;
+	}
+
+	char *buffer;
+	pContext->LocalToString(params[2], &buffer);
+	int maxlen = params[3];
+
+	return VariantMarshal::ReadVariantString(pIter->key, buffer, maxlen);
 }
 
-// native bool VScript_UnregisterClassFunction(const char[] className, const char[] name);
-static cell_t Native_UnregisterClassFunction(IPluginContext *pContext, const cell_t *params)
+// native int ScriptIterator.GetKeyInt();
+static cell_t Native_IterGetKeyInt(IPluginContext *pContext, const cell_t *params)
 {
-	char *className, *name;
-	pContext->LocalToString(params[1], &className);
-	pContext->LocalToString(params[2], &name);
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
 
-	return g_CallbackManager.UnregisterClassFunction(className, name);
+	if (!pIter->hasValue)
+	{
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return 0;
+	}
+
+	return VariantMarshal::ReadVariantInt(pIter->key);
+}
+
+// native ScriptFieldType ScriptIterator.ValueType.get();
+static cell_t Native_IterValueType(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
+
+	if (!pIter->hasValue)
+	{
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return 0;
+	}
+
+	return (cell_t)VariantMarshal::EngineToSPField(pIter->value.GetType());
+}
+
+// native int ScriptIterator.GetValueInt();
+static cell_t Native_IterGetValueInt(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
+
+	if (!pIter->hasValue)
+	{
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return 0;
+	}
+
+	return VariantMarshal::ReadVariantInt(pIter->value);
+}
+
+// native bool ScriptIterator.GetValueBool();
+static cell_t Native_IterGetValueBool(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
+
+	if (!pIter->hasValue)
+	{
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return 0;
+	}
+
+	return VariantMarshal::ReadVariantBool(pIter->value);
+}
+
+// native float ScriptIterator.GetValueFloat();
+static cell_t Native_IterGetValueFloat(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
+
+	if (!pIter->hasValue)
+	{
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return 0;
+	}
+
+	return sp_ftoc(VariantMarshal::ReadVariantFloat(pIter->value));
+}
+
+// native int ScriptIterator.GetValueString(char[] buffer, int maxlen);
+static cell_t Native_IterGetValueString(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return 0;
+
+	if (!pIter->hasValue)
+	{
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return 0;
+	}
+
+	char *buffer;
+	pContext->LocalToString(params[2], &buffer);
+	int maxlen = params[3];
+
+	return VariantMarshal::ReadVariantString(pIter->value, buffer, maxlen);
+}
+
+// native ScriptHandle ScriptIterator.GetValueHScript();
+static cell_t Native_IterGetValueHScript(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return BAD_HANDLE;
+
+	if (!pIter->hasValue)
+	{
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return BAD_HANDLE;
+	}
+
+	HSCRIPT h = VariantMarshal::ReadVariantHScript(pIter->value);
+	if (!h)
+		return BAD_HANDLE;
+
+	pIter->value = ScriptVariant_t();
+
+	return (cell_t)CreateHScriptHandle(pContext, h, HScriptType::Table, HScriptOwnership::Owned);
+}
+
+// native int ScriptIterator.GetValueEntity();
+static cell_t Native_IterGetValueEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return -1;
+
+	ScriptIteratorState *pIter = ReadScriptIterator(pContext, (Handle_t)params[1]);
+	if (!pIter) return -1;
+
+	if (!pIter->hasValue)
+	{
+		pContext->ThrowNativeError("No iteration value available (call Next() first)");
+		return -1;
+	}
+
+	return VariantToEntityIndex(pVM, pIter->value);
+}
+
+// ScriptContext methodmap (for VScript -> SP callbacks)
+static ScriptContext *ReadScriptContext(IPluginContext *pContext, Handle_t hndl)
+{
+	HandleSecurity sec(pContext->GetIdentity(), myself->GetIdentity());
+	ScriptContext *pCtx = nullptr;
+	HandleError err = handlesys->ReadHandle(hndl, g_VScriptExt.GetScriptContextHandleType(), &sec, (void **)&pCtx);
+
+	if (err != HandleError_None)
+	{
+		pContext->ThrowNativeError("Invalid ScriptContext handle (error %d)", err);
+		return nullptr;
+	}
+
+	return pCtx;
+}
+
+template <int N, void (ScriptContext::*GetFn)(int, float *) const>
+static cell_t Native_ScriptContext_GetArgFloatArray(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	cell_t *out;
+	pContext->LocalToPhysAddr(params[3], &out);
+
+	float fbuf[N];
+	(pCtx->*GetFn)(params[2], fbuf);
+	FloatsToCells<N>(fbuf, out);
+	return 0;
+}
+
+template <int N, void (ScriptContext::*SetFn)(const float *)>
+static cell_t Native_ScriptContext_SetReturnFloatArray(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	cell_t *cells;
+	pContext->LocalToPhysAddr(params[2], &cells);
+
+	float fbuf[N];
+	CellsToFloats<N>(cells, fbuf);
+	(pCtx->*SetFn)(fbuf);
+	return 0;
+}
+
+// native int ScriptContext.ArgCount.get();
+static cell_t Native_ScriptContext_ArgCount(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	return pCtx->GetArgCount();
+}
+
+// native int ScriptContext.Entity.get();
+static cell_t Native_ScriptContext_Entity(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return -1;
+
+	return pCtx->GetCallerEntity();
+}
+
+// native ScriptFieldType ScriptContext.GetArgType(int arg);
+static cell_t Native_ScriptContext_GetArgType(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	return (cell_t)pCtx->GetArgType(params[2]);
+}
+
+// native int ScriptContext.GetArgInt(int arg);
+static cell_t Native_ScriptContext_GetArgInt(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	return pCtx->GetArgInt(params[2]);
+}
+
+// native float ScriptContext.GetArgFloat(int arg);
+static cell_t Native_ScriptContext_GetArgFloat(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	return sp_ftoc(pCtx->GetArgFloat(params[2]));
+}
+
+// native bool ScriptContext.GetArgBool(int arg);
+static cell_t Native_ScriptContext_GetArgBool(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	return pCtx->GetArgBool(params[2]);
+}
+
+// native void ScriptContext.GetArgString(int arg, char[] buffer, int maxlen);
+static cell_t Native_ScriptContext_GetArgString(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	char *buffer;
+	pContext->LocalToString(params[3], &buffer);
+	int maxlen = params[4];
+
+	return pCtx->GetArgString(params[2], buffer, maxlen);
+}
+
+// native ScriptHandle ScriptContext.GetArgHScript(int arg);
+static cell_t Native_ScriptContext_GetArgHScript(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	HSCRIPT h = pCtx->GetArgHScript(params[2]);
+	if (!h)
+		return BAD_HANDLE;
+
+	return (cell_t)pCtx->CreateTrackedHScriptHandle(h);
+}
+
+// native int ScriptContext.GetArgEntity(int arg);
+static cell_t Native_ScriptContext_GetArgEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return -1;
+
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return -1;
+
+	HSCRIPT h = pCtx->GetArgHScript(params[2]);
+	if (!h)
+		return -1;
+
+	return HScriptToEntityIndex(pVM, h);
+}
+
+// native void ScriptContext.SetReturnInt(int value);
+static cell_t Native_ScriptContext_SetReturnInt(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	pCtx->SetReturnInt(params[2]);
+	return 0;
+}
+
+// native void ScriptContext.SetReturnFloat(float value);
+static cell_t Native_ScriptContext_SetReturnFloat(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	pCtx->SetReturnFloat(sp_ctof(params[2]));
+	return 0;
+}
+
+// native void ScriptContext.SetReturnBool(bool value);
+static cell_t Native_ScriptContext_SetReturnBool(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	pCtx->SetReturnBool(params[2] != 0);
+	return 0;
+}
+
+// native void ScriptContext.SetReturnString(const char[] value);
+static cell_t Native_ScriptContext_SetReturnString(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	char *value;
+	pContext->LocalToString(params[2], &value);
+
+	pCtx->SetReturnString(value);
+	return 0;
+}
+
+// native void ScriptContext.SetReturnHScript(ScriptHandle value);
+static cell_t Native_ScriptContext_SetReturnHScript(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	if (params[2] == 0)
+	{
+		pCtx->SetReturnHScript(nullptr);
+		return 0;
+	}
+
+	HScriptHandle *pHandle = ReadHScriptHandle(pContext, (Handle_t)params[2]);
+	if (!pHandle) return 0;
+
+	pCtx->SetReturnHScript(pHandle->hScript);
+
+	// Detach ownership so the plugin can safely delete the handle without freeing the underlying HSQOBJECT.
+	// PushVariant reads it after Dispatch returns.
+	pHandle->ownership = HScriptOwnership::Borrowed;
+
+	return 0;
+}
+
+// native void ScriptContext.SetReturnEntity(int entity);
+static cell_t Native_ScriptContext_SetReturnEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	FindEntityScriptOffsets();
+	if (s_offsetHScriptInstance == -1)
+		return pContext->ThrowNativeError("Could not find entity hscript instance offset");
+
+	CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(params[2]);
+	if (!pEntity)
+		return pContext->ThrowNativeError("Invalid entity index %d", params[2]);
+
+	HSCRIPT hScript = EnsureEntityScriptInstance(pVM, pEntity);
+	if (!hScript)
+		return pContext->ThrowNativeError("Failed to create script instance for entity %d", params[2]);
+
+	pCtx->SetReturnHScript(hScript);
+	return 0;
+}
+
+// native void ScriptContext.SetReturnNull();
+static cell_t Native_ScriptContext_SetReturnNull(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	pCtx->SetReturnNull();
+	return 0;
+}
+
+// native void ScriptContext.RaiseException(const char[] format, any ...);
+static cell_t Native_ScriptContext_RaiseException(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	if (params[0] > 2)
+	{
+		char buffer[512];
+		smutils->FormatString(buffer, sizeof(buffer), pContext, params, 2);
+		pCtx->RaiseException(buffer);
+	}
+	else
+	{
+		char *text;
+		pContext->LocalToString(params[2], &text);
+		pCtx->RaiseException(text);
+	}
+
+	return 0;
 }
 
 // ScriptCall methodmap
@@ -1335,483 +1800,11 @@ static cell_t Native_ScriptCall_IsReturnNull(IPluginContext *pContext, const cel
 	return pCall->returnValue.IsNull();
 }
 
-// Entity script offset helpers
-
-static int s_offsetScriptScope = -1;     // m_ScriptScope
-static int s_offsetHScriptInstance = -1; // m_hScriptInstance
-
-static void FindEntityScriptOffsets()
-{
-	if (s_offsetScriptScope != -1)
-		return;
-
-	CBaseEntity *pWorld = gamehelpers->ReferenceToEntity(0);
-	if (!pWorld)
-		return;
-
-	datamap_t *pMap = gamehelpers->GetDataMap(pWorld);
-	if (!pMap)
-		return;
-
-	sm_datatable_info_t infoThink, infoId;
-	bool foundThink = gamehelpers->FindDataMapInfo(pMap, "m_iszScriptThinkFunction", &infoThink);
-	bool foundId = gamehelpers->FindDataMapInfo(pMap, "m_iszScriptId", &infoId);
-
-	if (foundThink && foundId)
-	{
-		int T = infoThink.actual_offset;
-		int S = infoId.actual_offset;
-
-		// m_ScriptScope starts after m_iszScriptThinkFunction, aligned to pointer size
-		int scopeOffset = (T + sizeof(string_t) + (sizeof(void *) - 1)) & ~(sizeof(void *) - 1);
-
-		// m_hScriptInstance is right before m_iszScriptId
-		int instanceOffset = S - sizeof(HSCRIPT);
-
-		if (instanceOffset - scopeOffset == sizeof(CScriptScope))
-		{
-			s_offsetScriptScope = scopeOffset;
-			s_offsetHScriptInstance = instanceOffset;
-		}
-	}
-}
-
-static HSCRIPT ReadEntityScriptScope(CBaseEntity *pEntity)
-{
-	return *(HSCRIPT *)((uint8_t *)pEntity + s_offsetScriptScope);
-}
-
-static HSCRIPT ReadEntityHScriptInstance(CBaseEntity *pEntity)
-{
-	return *(HSCRIPT *)((uint8_t *)pEntity + s_offsetHScriptInstance);
-}
-
-static HSCRIPT EnsureEntityScriptInstance(IScriptVM *pVM, CBaseEntity *pEntity)
-{
-	HSCRIPT hInstance = ReadEntityHScriptInstance(pEntity);
-	if (hInstance)
-		return hInstance;
-
-	HSCRIPT hFunc = VariantMarshal::LookupFunction(pVM, "EntIndexToHScript", nullptr);
-	if (!hFunc)
-		return nullptr;
-
-	int entindex = gamehelpers->ReferenceToIndex(gamehelpers->EntityToBCompatRef(pEntity));
-	ScriptVariant_t arg = entindex;
-	pVM->ExecuteFunction(hFunc, &arg, 1, nullptr, nullptr, true);
-	pVM->ReleaseFunction(hFunc);
-
-	// Don't use ExecuteFunction's return, its heap SQObject can't be kept or safely released.
-	// EntIndexToHScript sets m_hScriptInstance as a side effect, so read it directly.
-	return ReadEntityHScriptInstance(pEntity);
-}
-
-static HSCRIPT EnsureEntityScriptScope(IScriptVM *pVM, CBaseEntity *pEntity)
-{
-	HSCRIPT hScope = ReadEntityScriptScope(pEntity);
-	if (hScope && hScope != INVALID_HSCRIPT)
-		return hScope;
-
-	HSCRIPT hInstance = EnsureEntityScriptInstance(pVM, pEntity);
-	if (!hInstance)
-		return nullptr;
-
-	HSCRIPT hValidate = VariantMarshal::LookupFunction(pVM, "ValidateScriptScope", hInstance);
-	if (!hValidate)
-		return nullptr;
-
-	ScriptVariant_t ret;
-	pVM->ExecuteFunction(hValidate, nullptr, 0, &ret, hInstance, true);
-	pVM->ReleaseFunction(hValidate);
-
-	bool validated = (bool)ret;
-	pVM->ReleaseValue(ret);
-
-	if (!validated)
-		return nullptr;
-
-	hScope = ReadEntityScriptScope(pEntity);
-	return (hScope && hScope != INVALID_HSCRIPT) ? hScope : nullptr;
-}
-
-// ScriptContext methodmap (for VScript -> SP callbacks)
-static ScriptContext *ReadScriptContext(IPluginContext *pContext, Handle_t hndl)
-{
-	HandleSecurity sec(pContext->GetIdentity(), myself->GetIdentity());
-	ScriptContext *pCtx = nullptr;
-	HandleError err = handlesys->ReadHandle(hndl, g_VScriptExt.GetScriptContextHandleType(), &sec, (void **)&pCtx);
-
-	if (err != HandleError_None)
-	{
-		pContext->ThrowNativeError("Invalid ScriptContext handle (error %d)", err);
-		return nullptr;
-	}
-
-	return pCtx;
-}
-
-template <int N, void (ScriptContext::*GetFn)(int, float *) const>
-static cell_t Native_ScriptContext_GetArgFloatArray(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	cell_t *out;
-	pContext->LocalToPhysAddr(params[3], &out);
-
-	float fbuf[N];
-	(pCtx->*GetFn)(params[2], fbuf);
-	FloatsToCells<N>(fbuf, out);
-	return 0;
-}
-
-template <int N, void (ScriptContext::*SetFn)(const float *)>
-static cell_t Native_ScriptContext_SetReturnFloatArray(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	cell_t *cells;
-	pContext->LocalToPhysAddr(params[2], &cells);
-
-	float fbuf[N];
-	CellsToFloats<N>(cells, fbuf);
-	(pCtx->*SetFn)(fbuf);
-	return 0;
-}
-
-// native int ScriptContext.ArgCount.get();
-static cell_t Native_ScriptContext_ArgCount(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	return pCtx->GetArgCount();
-}
-
-// native ScriptFieldType ScriptContext.GetArgType(int arg);
-static cell_t Native_ScriptContext_GetArgType(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	return (cell_t)pCtx->GetArgType(params[2]);
-}
-
-// native int ScriptContext.GetArgInt(int arg);
-static cell_t Native_ScriptContext_GetArgInt(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	return pCtx->GetArgInt(params[2]);
-}
-
-// native float ScriptContext.GetArgFloat(int arg);
-static cell_t Native_ScriptContext_GetArgFloat(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	return sp_ftoc(pCtx->GetArgFloat(params[2]));
-}
-
-// native bool ScriptContext.GetArgBool(int arg);
-static cell_t Native_ScriptContext_GetArgBool(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	return pCtx->GetArgBool(params[2]);
-}
-
-// native void ScriptContext.GetArgString(int arg, char[] buffer, int maxlen);
-static cell_t Native_ScriptContext_GetArgString(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	char *buffer;
-	pContext->LocalToString(params[3], &buffer);
-	int maxlen = params[4];
-
-	return pCtx->GetArgString(params[2], buffer, maxlen);
-}
-
-// native ScriptHandle ScriptContext.GetArgHScript(int arg);
-static cell_t Native_ScriptContext_GetArgHScript(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	HSCRIPT h = pCtx->GetArgHScript(params[2]);
-	if (!h)
-		return BAD_HANDLE;
-
-	return (cell_t)pCtx->CreateTrackedHScriptHandle(h);
-}
-
-// native void ScriptContext.SetReturnInt(int value);
-static cell_t Native_ScriptContext_SetReturnInt(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	pCtx->SetReturnInt(params[2]);
-	return 0;
-}
-
-// native void ScriptContext.SetReturnFloat(float value);
-static cell_t Native_ScriptContext_SetReturnFloat(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	pCtx->SetReturnFloat(sp_ctof(params[2]));
-	return 0;
-}
-
-// native void ScriptContext.SetReturnBool(bool value);
-static cell_t Native_ScriptContext_SetReturnBool(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	pCtx->SetReturnBool(params[2] != 0);
-	return 0;
-}
-
-// native void ScriptContext.SetReturnString(const char[] value);
-static cell_t Native_ScriptContext_SetReturnString(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	char *value;
-	pContext->LocalToString(params[2], &value);
-
-	pCtx->SetReturnString(value);
-	return 0;
-}
-
-// native void ScriptContext.SetReturnHScript(ScriptHandle value);
-static cell_t Native_ScriptContext_SetReturnHScript(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	if (params[2] == 0)
-	{
-		pCtx->SetReturnHScript(nullptr);
-		return 0;
-	}
-
-	HScriptHandle *pHandle = ReadHScriptHandle(pContext, (Handle_t)params[2]);
-	if (!pHandle) return 0;
-
-	pCtx->SetReturnHScript(pHandle->hScript);
-
-	// Detach ownership so the plugin can safely delete the handle without freeing the underlying HSQOBJECT.
-	// PushVariant reads it after Dispatch returns.
-	pHandle->ownership = HScriptOwnership::Borrowed;
-
-	return 0;
-}
-
-// native void ScriptContext.SetReturnEntity(int entity);
-static cell_t Native_ScriptContext_SetReturnEntity(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	FindEntityScriptOffsets();
-	if (s_offsetHScriptInstance == -1)
-		return pContext->ThrowNativeError("Could not find entity hscript instance offset");
-
-	CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(params[2]);
-	if (!pEntity)
-		return pContext->ThrowNativeError("Invalid entity index %d", params[2]);
-
-	HSCRIPT hScript = EnsureEntityScriptInstance(pVM, pEntity);
-	if (!hScript)
-		return pContext->ThrowNativeError("Failed to create script instance for entity %d", params[2]);
-
-	pCtx->SetReturnHScript(hScript);
-	return 0;
-}
-
-// native void ScriptContext.SetReturnNull();
-static cell_t Native_ScriptContext_SetReturnNull(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	pCtx->SetReturnNull();
-	return 0;
-}
-
-// native int ScriptContext.GetArgEntity(int arg);
-static cell_t Native_ScriptContext_GetArgEntity(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return -1;
-
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return -1;
-
-	HSCRIPT h = pCtx->GetArgHScript(params[2]);
-	if (!h)
-		return -1;
-
-	return HScriptToEntityIndex(pVM, h);
-}
-
-// native int ScriptContext.Entity.get();
-static cell_t Native_ScriptContext_Entity(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return -1;
-
-	return pCtx->GetCallerEntity();
-}
-
-// native ScriptHandle VScript_EntityToHScript(int entity, bool create = false);
-static cell_t Native_EntityToHScript(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	FindEntityScriptOffsets();
-	if (s_offsetHScriptInstance == -1)
-		return pContext->ThrowNativeError("Could not find entity hscript instance offset");
-
-	CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(params[1]);
-	if (!pEntity)
-		return pContext->ThrowNativeError("Invalid entity index %d", params[1]);
-
-	HSCRIPT hInstance;
-	if (params[2])
-		hInstance = EnsureEntityScriptInstance(pVM, pEntity);
-	else
-	{
-		hInstance = ReadEntityHScriptInstance(pEntity);
-		if (!hInstance)
-			return BAD_HANDLE;
-	}
-
-	if (!hInstance)
-		return BAD_HANDLE;
-
-	return (cell_t)g_VScriptExt.GetOrCreateCachedEntityHandle(pEntity, hInstance, HScriptType::Value);
-}
-
-// native ScriptHandle VScript_GetEntityScriptScope(int entity, bool create = false);
-static cell_t Native_GetEntityScriptScope(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	FindEntityScriptOffsets();
-	if (s_offsetScriptScope == -1)
-		return pContext->ThrowNativeError("Could not find entity script scope offset");
-
-	CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(params[1]);
-	if (!pEntity)
-		return pContext->ThrowNativeError("Invalid entity index %d", params[1]);
-
-	HSCRIPT hScope;
-	if (params[2])
-		hScope = EnsureEntityScriptScope(pVM, pEntity);
-	else
-	{
-		hScope = ReadEntityScriptScope(pEntity);
-		if (!hScope || hScope == INVALID_HSCRIPT)
-			return BAD_HANDLE;
-	}
-
-	if (!hScope)
-		return BAD_HANDLE;
-
-	return (cell_t)g_VScriptExt.GetOrCreateCachedEntityHandle(pEntity, hScope, HScriptType::Scope);
-}
-
-// native int VScript_HScriptToEntity(ScriptHandle hscript);
-static cell_t Native_HScriptToEntity(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return -1;
-
-	HSCRIPT h;
-	if (!ReadHScriptParam(pContext, params[1], h))
-		return -1;
-	if (!h)
-		return -1;
-
-	return HScriptToEntityIndex(pVM, h);
-}
-
-// Utility
-// native bool VScript_GenerateUniqueKey(const char[] root, char[] buffer, int maxlen);
-static cell_t Native_GenerateUniqueKey(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	char *root;
-	pContext->LocalToString(params[1], &root);
-
-	char *buffer;
-	pContext->LocalToString(params[2], &buffer);
-	int maxlen = params[3];
-
-	return pVM->GenerateUniqueKey(root, buffer, maxlen);
-}
-
-// native void ScriptContext.RaiseException(const char[] format, any ...);
-static cell_t Native_ScriptContext_RaiseException(IPluginContext *pContext, const cell_t *params)
-{
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
-	if (!pCtx) return 0;
-
-	if (params[0] > 2)
-	{
-		char buffer[512];
-		smutils->FormatString(buffer, sizeof(buffer), pContext, params, 2);
-		pCtx->RaiseException(buffer);
-	}
-	else
-	{
-		char *text;
-		pContext->LocalToString(params[2], &text);
-		pCtx->RaiseException(text);
-	}
-
-	return 0;
-}
-
-// native void VScript_AddSearchPath(const char[] path);
-static cell_t Native_AddSearchPath(IPluginContext *pContext, const cell_t *params)
-{
-	IScriptVM *pVM = GetVMOrThrow(pContext);
-	if (!pVM) return 0;
-
-	char *path;
-	pContext->LocalToString(params[1], &path);
-
-	pVM->AddSearchPath(path);
-	return 0;
-}
-
-// Native Registration Table
 const sp_nativeinfo_t g_VScriptNatives[] =
 {
 	// VM lifecycle
 	{ "VScript_IsVMInitialized",           Native_IsVMInitialized },
 	{ "VScript_Run",                       Native_Run },
-	{ "VScript_AddSearchPath",             Native_AddSearchPath },
 
 	// Compilation
 	{ "VScript_CompileScript",             Native_CompileScript },
@@ -1827,13 +1820,22 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "VScript_UnregisterFunction",        Native_UnregisterFunction },
 	{ "VScript_UnregisterClassFunction",   Native_UnregisterClassFunction },
 
+	// Entity integration
+	{ "VScript_GetEntityScriptScope",      Native_GetEntityScriptScope },
+	{ "VScript_EntityToHScript",           Native_EntityToHScript },
+	{ "VScript_HScriptToEntity",           Native_HScriptToEntity },
+
+	// Utility
+	{ "VScript_GenerateUniqueKey",         Native_GenerateUniqueKey },
+	{ "VScript_AddSearchPath",             Native_AddSearchPath },
+
 	// ScriptHandle methodmap
-	{ "ScriptHandle.HasKey",               Native_ValueExists },
-	{ "ScriptHandle.DeleteKey",            Native_ClearValue },
 	{ "ScriptHandle.GetType",              Native_GetValueType },
+	{ "ScriptHandle.HasKey",               Native_ValueExists },
+	{ "ScriptHandle.Length.get",           Native_GetNumTableEntries },
 	{ "ScriptHandle.GetInt",               Native_GetValueInt },
-	{ "ScriptHandle.GetBool",              Native_GetValueBool },
 	{ "ScriptHandle.GetFloat",             Native_GetValueFloat },
+	{ "ScriptHandle.GetBool",              Native_GetValueBool },
 	{ "ScriptHandle.GetString",            Native_GetValueString },
 	{ "ScriptHandle.GetVector",            Native_GetValueFloatArray<3, VariantMarshal::ReadVariantVector> },
 	{ "ScriptHandle.GetVector2D",          Native_GetValueFloatArray<2, VariantMarshal::ReadVariantVector2D> },
@@ -1849,16 +1851,16 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptHandle.SetQuaternion",        Native_SetValueFloatArray<4, VariantMarshal::WriteVariantQuaternion> },
 	{ "ScriptHandle.SetHScript",           Native_SetValueHScript },
 	{ "ScriptHandle.SetNull",              Native_SetValueNull },
-	{ "ScriptHandle.Length.get",           Native_GetNumTableEntries },
-	{ "ScriptHandle.GetNextKey",           Native_GetNextKey },
+	{ "ScriptHandle.DeleteKey",            Native_ClearValue },
 	{ "ScriptHandle.Iterate",              Native_Iterate },
+	{ "ScriptHandle.GetNextKey",           Native_GetNextKey },
 	{ "ScriptHandle.LookupFunction",       Native_LookupFunction },
 
 	// ScriptIterator methodmap
 	{ "ScriptIterator.Next",               Native_IterNext },
+	{ "ScriptIterator.KeyType.get",        Native_IterKeyType },
 	{ "ScriptIterator.GetKeyString",       Native_IterGetKeyString },
 	{ "ScriptIterator.GetKeyInt",          Native_IterGetKeyInt },
-	{ "ScriptIterator.KeyType.get",        Native_IterKeyType },
 	{ "ScriptIterator.ValueType.get",      Native_IterValueType },
 	{ "ScriptIterator.GetValueInt",        Native_IterGetValueInt },
 	{ "ScriptIterator.GetValueBool",       Native_IterGetValueBool },
@@ -1870,24 +1872,9 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptIterator.GetValueHScript",    Native_IterGetValueHScript },
 	{ "ScriptIterator.GetValueEntity",     Native_IterGetValueEntity },
 
-	// ScriptCall methodmap
-	{ "ScriptCall.ScriptCall",            Native_ScriptCall_Ctor },
-	{ "ScriptCall.Execute",               Native_ScriptCall_Execute },
-	{ "ScriptCall.ExecuteInScope",        Native_ScriptCall_ExecuteInScope },
-	{ "ScriptCall.ReturnType.get",        Native_ScriptCall_ReturnType },
-	{ "ScriptCall.GetReturnInt",          Native_ScriptCall_GetReturnInt },
-	{ "ScriptCall.GetReturnFloat",        Native_ScriptCall_GetReturnFloat },
-	{ "ScriptCall.GetReturnBool",         Native_ScriptCall_GetReturnBool },
-	{ "ScriptCall.GetReturnString",       Native_ScriptCall_GetReturnString },
-	{ "ScriptCall.GetReturnVector",       Native_ScriptCall_GetReturnFloatArray<3, VariantMarshal::ReadVariantVector> },
-	{ "ScriptCall.GetReturnVector2D",     Native_ScriptCall_GetReturnFloatArray<2, VariantMarshal::ReadVariantVector2D> },
-	{ "ScriptCall.GetReturnQuaternion",   Native_ScriptCall_GetReturnFloatArray<4, VariantMarshal::ReadVariantQuaternion> },
-	{ "ScriptCall.GetReturnHScript",      Native_ScriptCall_GetReturnHScript },
-	{ "ScriptCall.GetReturnEntity",       Native_ScriptCall_GetReturnEntity },
-	{ "ScriptCall.IsReturnNull",          Native_ScriptCall_IsReturnNull },
-
 	// ScriptContext methodmap
 	{ "ScriptContext.ArgCount.get",        Native_ScriptContext_ArgCount },
+	{ "ScriptContext.Entity.get",          Native_ScriptContext_Entity },
 	{ "ScriptContext.GetArgType",          Native_ScriptContext_GetArgType },
 	{ "ScriptContext.GetArgInt",           Native_ScriptContext_GetArgInt },
 	{ "ScriptContext.GetArgFloat",         Native_ScriptContext_GetArgFloat },
@@ -1908,16 +1895,23 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptContext.SetReturnHScript",    Native_ScriptContext_SetReturnHScript },
 	{ "ScriptContext.SetReturnEntity",     Native_ScriptContext_SetReturnEntity },
 	{ "ScriptContext.SetReturnNull",       Native_ScriptContext_SetReturnNull },
-	{ "ScriptContext.Entity.get",          Native_ScriptContext_Entity },
 	{ "ScriptContext.RaiseException",      Native_ScriptContext_RaiseException },
 
-	// Entity integration
-	{ "VScript_GetEntityScriptScope",      Native_GetEntityScriptScope },
-	{ "VScript_EntityToHScript",           Native_EntityToHScript },
-	{ "VScript_HScriptToEntity",           Native_HScriptToEntity },
-
-	// Utility
-	{ "VScript_GenerateUniqueKey",         Native_GenerateUniqueKey },
+	// ScriptCall methodmap
+	{ "ScriptCall.ScriptCall",            Native_ScriptCall_Ctor },
+	{ "ScriptCall.Execute",               Native_ScriptCall_Execute },
+	{ "ScriptCall.ExecuteInScope",        Native_ScriptCall_ExecuteInScope },
+	{ "ScriptCall.ReturnType.get",        Native_ScriptCall_ReturnType },
+	{ "ScriptCall.GetReturnInt",          Native_ScriptCall_GetReturnInt },
+	{ "ScriptCall.GetReturnFloat",        Native_ScriptCall_GetReturnFloat },
+	{ "ScriptCall.GetReturnBool",         Native_ScriptCall_GetReturnBool },
+	{ "ScriptCall.GetReturnString",       Native_ScriptCall_GetReturnString },
+	{ "ScriptCall.GetReturnVector",       Native_ScriptCall_GetReturnFloatArray<3, VariantMarshal::ReadVariantVector> },
+	{ "ScriptCall.GetReturnVector2D",     Native_ScriptCall_GetReturnFloatArray<2, VariantMarshal::ReadVariantVector2D> },
+	{ "ScriptCall.GetReturnQuaternion",   Native_ScriptCall_GetReturnFloatArray<4, VariantMarshal::ReadVariantQuaternion> },
+	{ "ScriptCall.GetReturnHScript",      Native_ScriptCall_GetReturnHScript },
+	{ "ScriptCall.GetReturnEntity",       Native_ScriptCall_GetReturnEntity },
+	{ "ScriptCall.IsReturnNull",          Native_ScriptCall_IsReturnNull },
 
 	{ nullptr, nullptr }
 };
