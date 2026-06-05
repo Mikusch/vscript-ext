@@ -2,6 +2,8 @@
 import sys
 from ambuild2 import run
 
+# Simple extensions do not need to modify this file.
+
 parser = run.BuildParser(sourcePath=sys.path[0], api='2.2')
 parser.options.add_argument('--sm-path', type=str, dest='sm_path', default=None,
                        help='Path to SourceMod')

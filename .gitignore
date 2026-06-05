@@ -1,5 +1,4 @@
 build/
-safetyhook/
 *.o
 *.so
 *.dll
