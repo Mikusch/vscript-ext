@@ -66,6 +66,10 @@ public:
 	IForward *GetOnScriptPrintForward() const { return m_pOnScriptPrint; }
 	IForward *GetOnScriptErrorForward() const { return m_pOnScriptError; }
 
+	void OnVMCreated(IScriptVM *pVM);
+	void OnVMDestroyed(IScriptVM *pVM);
+	void OnVMDestroyedPost();
+
 private:
 	IScriptManager *m_pScriptManager = nullptr;
 	IScriptVM *m_pScriptVM = nullptr;
@@ -89,11 +93,15 @@ private:
 
 	void ClearEntityHandleCache();
 
-	IScriptVM *Hook_CreateVM(ScriptLanguage_t language);
-	void Hook_DestroyVM(IScriptVM *pVM);
-	void Hook_DestroyVM_Post(IScriptVM *pVM);
-	bool Hook_RegisterClass(ScriptClassDesc_t *pClassDesc);
-	void Hook_SetErrorCallback(ScriptErrorFunc_t pFunc);
+	void InstallManagerHooks();
+	void RemoveManagerHooks();
+	void InstallVMHooks(IScriptVM *pVM);
+	void RemoveVMHooks();
+
+	KHook::Return<IScriptVM *> Hook_CreateVM(IScriptManager *pManager, ScriptLanguage_t language);
+	KHook::Return<void> Hook_DestroyVM(IScriptManager *pManager, IScriptVM *pVM);
+	KHook::Return<bool> Hook_RegisterClass(IScriptVM *pVM, ScriptClassDesc_t *pClassDesc);
+	KHook::Return<void> Hook_SetErrorCallback(IScriptVM *pVM, ScriptErrorFunc_t pFunc);
 };
 
 void ReleaseOwnedHScript(IScriptVM *pVM, HSCRIPT hScript, HScriptType type);

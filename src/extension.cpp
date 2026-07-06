@@ -3,15 +3,17 @@
 #include "script_context.h"
 #include "callback_manager.h"
 
+#include <khook.hpp>
+
 CVScriptExtension g_VScriptExt;
 CGlobalVars *gpGlobals = nullptr;
 uint32_t g_vmGeneration = 0; // Used by ScriptCallContext to invalidate cached function lookups across map changes
 SMEXT_LINK(&g_VScriptExt);
 
-SH_DECL_HOOK1(IScriptManager, CreateVM, SH_NOATTRIB, 0, IScriptVM *, ScriptLanguage_t);
-SH_DECL_HOOK1_void(IScriptManager, DestroyVM, SH_NOATTRIB, 0, IScriptVM *);
-SH_DECL_HOOK1(IScriptVM, RegisterClass, SH_NOATTRIB, 0, bool, ScriptClassDesc_t *);
-SH_DECL_HOOK1_void(IScriptVM, SetErrorCallback, SH_NOATTRIB, 0, ScriptErrorFunc_t);
+static KHook::Virtual<IScriptManager, IScriptVM *, ScriptLanguage_t> g_HookCreateVM;
+static KHook::Virtual<IScriptManager, void, IScriptVM *> g_HookDestroyVM;
+static KHook::Virtual<IScriptVM, bool, ScriptClassDesc_t *> g_HookRegisterClass;
+static KHook::Virtual<IScriptVM, void, ScriptErrorFunc_t> g_HookSetErrorCallback;
 
 static void OnScriptOutput(const char *pszText)
 {
@@ -41,49 +43,99 @@ static bool OnScriptError(ScriptErrorLevel_t eLevel, const char *pszText)
 	return false;
 }
 
-void CVScriptExtension::Hook_SetErrorCallback(ScriptErrorFunc_t pFunc)
+KHook::Return<IScriptVM *> CVScriptExtension::Hook_CreateVM(IScriptManager *pManager, ScriptLanguage_t language)
 {
-	g_pOriginalErrorCallback = pFunc;
-	SH_CALL(m_pScriptVM, &IScriptVM::SetErrorCallback)(&OnScriptError);
-	RETURN_META(MRES_SUPERCEDE);
+	IScriptVM *pVM = g_HookCreateVM.CallOriginal(pManager, language);
+	OnVMCreated(pVM);
+	return {KHook::Action::Supersede, pVM};
 }
 
-IScriptVM *CVScriptExtension::Hook_CreateVM(ScriptLanguage_t language)
+KHook::Return<void> CVScriptExtension::Hook_DestroyVM(IScriptManager *pManager, IScriptVM *pVM)
 {
-	IScriptVM *pVM = META_RESULT_ORIG_RET(IScriptVM *);
-
-	if (pVM)
-	{
-		m_pScriptVM = pVM;
-
-		SH_ADD_HOOK(IScriptVM, RegisterClass, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterClass), false);
-		SH_ADD_HOOK(IScriptVM, SetErrorCallback, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_SetErrorCallback), false);
-
-		pVM->SetOutputCallback(&OnScriptOutput);
-		SH_CALL(pVM, &IScriptVM::SetErrorCallback)(&OnScriptError); // bypass hook
-
-		if (m_pOnVMInit)
-			m_pOnVMInit->Execute(nullptr);
-
-		g_CallbackManager.OnVMInitialized(pVM);
-	}
-
-	RETURN_META_VALUE(MRES_IGNORED, pVM);
+	OnVMDestroyed(pVM);
+	g_HookDestroyVM.CallOriginal(pManager, pVM);
+	OnVMDestroyedPost();
+	return {KHook::Action::Supersede};
 }
 
-bool CVScriptExtension::Hook_RegisterClass(ScriptClassDesc_t *pClassDesc)
+KHook::Return<bool> CVScriptExtension::Hook_RegisterClass(IScriptVM *pVM, ScriptClassDesc_t *pClassDesc)
 {
 	g_CallbackManager.OnRegisterClass(pClassDesc);
-
-	RETURN_META_VALUE(MRES_IGNORED, true);
+	return {KHook::Action::Ignore};
 }
 
-void CVScriptExtension::Hook_DestroyVM(IScriptVM *pVM)
+KHook::Return<void> CVScriptExtension::Hook_SetErrorCallback(IScriptVM *pVM, ScriptErrorFunc_t pFunc)
+{
+	g_pOriginalErrorCallback = pFunc;
+	g_HookSetErrorCallback.CallOriginal(pVM, &OnScriptError);
+	return {KHook::Action::Supersede};
+}
+
+void CVScriptExtension::InstallManagerHooks()
+{
+	g_HookCreateVM.AddContext(this, &CVScriptExtension::Hook_CreateVM, nullptr);
+	g_HookCreateVM.Configure(&IScriptManager::CreateVM);
+
+	g_HookDestroyVM.AddContext(this, &CVScriptExtension::Hook_DestroyVM, nullptr);
+	g_HookDestroyVM.Configure(&IScriptManager::DestroyVM);
+
+	g_HookRegisterClass.AddContext(this, &CVScriptExtension::Hook_RegisterClass, nullptr);
+	g_HookRegisterClass.Configure(&IScriptVM::RegisterClass);
+
+	g_HookSetErrorCallback.AddContext(this, &CVScriptExtension::Hook_SetErrorCallback, nullptr);
+	g_HookSetErrorCallback.Configure(&IScriptVM::SetErrorCallback);
+
+	g_HookCreateVM.Add(m_pScriptManager);
+	g_HookDestroyVM.Add(m_pScriptManager);
+}
+
+void CVScriptExtension::RemoveManagerHooks()
+{
+	if (m_pScriptManager)
+	{
+		g_HookCreateVM.Remove(m_pScriptManager);
+		g_HookDestroyVM.Remove(m_pScriptManager);
+	}
+}
+
+void CVScriptExtension::InstallVMHooks(IScriptVM *pVM)
+{
+	g_HookRegisterClass.Add(pVM);
+	g_HookSetErrorCallback.Add(pVM);
+}
+
+void CVScriptExtension::RemoveVMHooks()
+{
+	if (m_pScriptVM)
+	{
+		g_HookRegisterClass.Remove(m_pScriptVM);
+		g_HookSetErrorCallback.Remove(m_pScriptVM);
+	}
+}
+
+void CVScriptExtension::OnVMCreated(IScriptVM *pVM)
+{
+	if (!pVM)
+		return;
+
+	m_pScriptVM = pVM;
+
+	InstallVMHooks(pVM);
+
+	pVM->SetOutputCallback(&OnScriptOutput);
+	g_HookSetErrorCallback.CallOriginal(pVM, &OnScriptError);
+
+	if (m_pOnVMInit)
+		m_pOnVMInit->Execute(nullptr);
+
+	g_CallbackManager.OnVMInitialized(pVM);
+}
+
+void CVScriptExtension::OnVMDestroyed(IScriptVM *pVM)
 {
 	if (pVM && pVM == m_pScriptVM)
 	{
-		SH_REMOVE_HOOK(IScriptVM, RegisterClass, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterClass), false);
-		SH_REMOVE_HOOK(IScriptVM, SetErrorCallback, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_SetErrorCallback), false);
+		RemoveVMHooks();
 		g_pOriginalErrorCallback = nullptr;
 
 		g_vmGeneration++;
@@ -97,14 +149,11 @@ void CVScriptExtension::Hook_DestroyVM(IScriptVM *pVM)
 
 		m_pScriptVM = nullptr;
 	}
-
-	RETURN_META(MRES_IGNORED);
 }
 
-void CVScriptExtension::Hook_DestroyVM_Post(IScriptVM *pVM)
+void CVScriptExtension::OnVMDestroyedPost()
 {
 	g_CallbackManager.CleanupStaleRegistrations();
-	RETURN_META(MRES_IGNORED);
 }
 
 bool CVScriptExtension::SDK_OnMetamodLoad(ISmmAPI *ismm, char *error, size_t maxlen, bool late)
@@ -113,28 +162,16 @@ bool CVScriptExtension::SDK_OnMetamodLoad(ISmmAPI *ismm, char *error, size_t max
 
 	GET_V_IFACE_CURRENT(GetEngineFactory, m_pScriptManager, IScriptManager, VSCRIPT_INTERFACE_VERSION);
 
-	SH_ADD_HOOK(IScriptManager, CreateVM, m_pScriptManager, SH_MEMBER(this, &CVScriptExtension::Hook_CreateVM), true);
-	SH_ADD_HOOK(IScriptManager, DestroyVM, m_pScriptManager, SH_MEMBER(this, &CVScriptExtension::Hook_DestroyVM), false);
-	SH_ADD_HOOK(IScriptManager, DestroyVM, m_pScriptManager, SH_MEMBER(this, &CVScriptExtension::Hook_DestroyVM_Post), true);
+	InstallManagerHooks();
 
 	return true;
 }
 
 bool CVScriptExtension::SDK_OnMetamodUnload(char *error, size_t maxlen)
 {
-	if (m_pScriptVM)
-	{
-		SH_REMOVE_HOOK(IScriptVM, RegisterClass, m_pScriptVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterClass), false);
-		SH_REMOVE_HOOK(IScriptVM, SetErrorCallback, m_pScriptVM, SH_MEMBER(this, &CVScriptExtension::Hook_SetErrorCallback), false);
-		g_pOriginalErrorCallback = nullptr;
-	}
-
-	if (m_pScriptManager)
-	{
-		SH_REMOVE_HOOK(IScriptManager, CreateVM, m_pScriptManager, SH_MEMBER(this, &CVScriptExtension::Hook_CreateVM), true);
-		SH_REMOVE_HOOK(IScriptManager, DestroyVM, m_pScriptManager, SH_MEMBER(this, &CVScriptExtension::Hook_DestroyVM), false);
-		SH_REMOVE_HOOK(IScriptManager, DestroyVM, m_pScriptManager, SH_MEMBER(this, &CVScriptExtension::Hook_DestroyVM_Post), true);
-	}
+	RemoveVMHooks();
+	g_pOriginalErrorCallback = nullptr;
+	RemoveManagerHooks();
 
 	return true;
 }
