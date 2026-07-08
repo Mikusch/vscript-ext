@@ -58,6 +58,32 @@ Action Command_Add(int client, int args)
 }
 ```
 
+### Calling a Function on an Entity Instance
+
+`Execute` runs a function in the root (global) scope. To call a method that belongs to a specific entity use `ExecuteInScope`, passing the entity handle from `VScript_EntityToHScript`.
+The same `ScriptCall` handle can be reused across any number of entities. The function is re-resolved for each one automatically.
+
+Given an entity method (e.g. `CTFPlayer::ForceChangeTeam`):
+
+```sourcepawn
+ScriptCall g_ForceChangeTeam;
+
+public void OnPluginStart()
+{
+	// void CTFPlayer::ForceChangeTeam(int team, bool full_team_switch)
+	g_ForceChangeTeam = new ScriptCall("ForceChangeTeam", ScriptField_Void, ScriptField_Int, ScriptField_Bool);
+}
+
+void ForceChangeClientTeam(int client, int team)
+{
+	ScriptHandle player = VScript_EntityToHScript(client);
+	if (!player)
+		return;
+
+	g_ForceChangeTeam.ExecuteInScope(player, team, false);
+}
+```
+
 ### Exposing SourcePawn Functions to VScript
 
 Register functions that VScript code can call.
