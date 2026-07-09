@@ -24,6 +24,7 @@ struct ScriptCallContext
 	ScriptVariant_t returnValue;
 	uint32_t executedGeneration = 0;
 	bool hasExecuted = false;
+	bool isExecuting = false;
 
 	ScriptCallContext(const char *name, SPFieldType retType, std::vector<SPFieldType> params)
 		: functionName(name)

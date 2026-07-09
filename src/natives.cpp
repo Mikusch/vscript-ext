@@ -1689,6 +1689,13 @@ static bool MarshalVariadicArgs(IPluginContext *pContext, const cell_t *params, 
 	return true;
 }
 
+struct ScopedScriptCallExecution
+{
+	ScriptCallContext *pCall;
+	explicit ScopedScriptCallExecution(ScriptCallContext *call) : pCall(call) { pCall->isExecuting = true; }
+	~ScopedScriptCallExecution() { pCall->isExecuting = false; }
+};
+
 // native ScriptStatus ScriptCall.Execute(any ...);
 static cell_t Native_ScriptCall_Execute(IPluginContext *pContext, const cell_t *params)
 {
@@ -1698,11 +1705,18 @@ static cell_t Native_ScriptCall_Execute(IPluginContext *pContext, const cell_t *
 	ScriptCallContext *pCall = ReadScriptCall(pContext, params[1]);
 	if (!pCall) return 0;
 
+	if (pCall->isExecuting)
+		return pContext->ThrowNativeError("ScriptCall is already executing");
+
 	std::vector<ScriptVariant_t> args;
 	if (!MarshalVariadicArgs(pContext, params, 2, pCall->paramTypes, args))
 		return 0;
 
-	ScriptStatus_t result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), nullptr);
+	ScriptStatus_t result;
+	{
+		ScopedScriptCallExecution guard(pCall);
+		result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), nullptr);
+	}
 
 	for (ScriptVariant_t &arg : args)
 		arg.Free();
@@ -1719,6 +1733,9 @@ static cell_t Native_ScriptCall_ExecuteInScope(IPluginContext *pContext, const c
 	ScriptCallContext *pCall = ReadScriptCall(pContext, params[1]);
 	if (!pCall) return 0;
 
+	if (pCall->isExecuting)
+		return pContext->ThrowNativeError("ScriptCall is already executing");
+
 	HSCRIPT hScope;
 	if (!ReadHScriptParam(pContext, params[2], hScope))
 		return 0;
@@ -1727,7 +1744,11 @@ static cell_t Native_ScriptCall_ExecuteInScope(IPluginContext *pContext, const c
 	if (!MarshalVariadicArgs(pContext, params, 3, pCall->paramTypes, args))
 		return 0;
 
-	ScriptStatus_t result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), hScope);
+	ScriptStatus_t result;
+	{
+		ScopedScriptCallExecution guard(pCall);
+		result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), hScope);
+	}
 
 	for (ScriptVariant_t &arg : args)
 		arg.Free();
