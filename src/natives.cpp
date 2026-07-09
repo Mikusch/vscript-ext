@@ -15,6 +15,12 @@ HScriptHandle *ReadHScriptHandle(IPluginContext *pContext, Handle_t hndl)
 		return nullptr;
 	}
 
+	if (pHandle->hScript && !IsCurrentGeneration(pHandle->vmGeneration))
+	{
+		pContext->ThrowNativeError("ScriptHandle is no longer valid");
+		return nullptr;
+	}
+
 	return pHandle;
 }
 
@@ -69,9 +75,14 @@ static bool ReadOptionalHScriptParam(IPluginContext *pContext, cell_t param, HSC
 	return ReadHScriptParam(pContext, param, out);
 }
 
-static bool IsValidSPFieldType(int value)
+static bool IsDeclarableFieldType(SPFieldType type)
 {
-	return value >= (int)SPFieldType::Void && value <= (int)SPFieldType::Variant;
+	return type >= SPFieldType::Void && type <= SPFieldType::Variant;
+}
+
+static bool IsCallArgType(SPFieldType type)
+{
+	return type >= SPFieldType::Void && type <= SPFieldType::Quaternion;
 }
 
 template <int N>
@@ -97,6 +108,12 @@ static ScriptIteratorState *ReadScriptIterator(IPluginContext *pContext, Handle_
 	if (err != HandleError_None)
 	{
 		pContext->ThrowNativeError("Invalid ScriptIterator (error %d)", err);
+		return nullptr;
+	}
+
+	if (!IsCurrentGeneration(pIter->vmGeneration))
+	{
+		pContext->ThrowNativeError("ScriptIterator is no longer valid");
 		return nullptr;
 	}
 
@@ -253,7 +270,7 @@ static cell_t Native_RegisterFunction(IPluginContext *pContext, const cell_t *pa
 
 	pContext->LocalToString(params[3], &description);
 
-	if (!IsValidSPFieldType(params[4]))
+	if (!IsDeclarableFieldType((SPFieldType)params[4]))
 		return pContext->ThrowNativeError("Invalid return type %d", params[4]);
 	SPFieldType returnType = (SPFieldType)params[4];
 
@@ -263,7 +280,7 @@ static cell_t Native_RegisterFunction(IPluginContext *pContext, const cell_t *pa
 	{
 		cell_t *addr;
 		pContext->LocalToPhysAddr(params[5 + i], &addr);
-		if (!IsValidSPFieldType(*addr))
+		if (!IsDeclarableFieldType((SPFieldType)*addr))
 			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
 		paramTypes.push_back((SPFieldType)*addr);
 	}
@@ -290,7 +307,7 @@ static cell_t Native_RegisterClassFunction(IPluginContext *pContext, const cell_
 
 	pContext->LocalToString(params[4], &description);
 
-	if (!IsValidSPFieldType(params[5]))
+	if (!IsDeclarableFieldType((SPFieldType)params[5]))
 		return pContext->ThrowNativeError("Invalid return type %d", params[5]);
 	SPFieldType returnType = (SPFieldType)params[5];
 
@@ -300,7 +317,7 @@ static cell_t Native_RegisterClassFunction(IPluginContext *pContext, const cell_
 	{
 		cell_t *addr;
 		pContext->LocalToPhysAddr(params[6 + i], &addr);
-		if (!IsValidSPFieldType(*addr))
+		if (!IsDeclarableFieldType((SPFieldType)*addr))
 			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
 		paramTypes.push_back((SPFieldType)*addr);
 	}
@@ -1482,6 +1499,12 @@ static ScriptCallContext *ReadExecutedScriptCall(IPluginContext *pContext, Handl
 		return nullptr;
 	}
 
+	if (!IsCurrentGeneration(pCall->executedGeneration))
+	{
+		pContext->ThrowNativeError("ScriptCall return value is no longer valid");
+		return nullptr;
+	}
+
 	return pCall;
 }
 
@@ -1509,7 +1532,7 @@ static cell_t Native_ScriptCall_Ctor(IPluginContext *pContext, const cell_t *par
 	if (!name || !name[0])
 		return pContext->ThrowNativeError("Function name cannot be empty");
 
-	if (!IsValidSPFieldType(params[2]))
+	if (!IsDeclarableFieldType((SPFieldType)params[2]))
 		return pContext->ThrowNativeError("Invalid return type %d", params[2]);
 	SPFieldType returnType = (SPFieldType)params[2];
 
@@ -1519,8 +1542,8 @@ static cell_t Native_ScriptCall_Ctor(IPluginContext *pContext, const cell_t *par
 	{
 		cell_t *addr;
 		pContext->LocalToPhysAddr(params[3 + i], &addr);
-		if (!IsValidSPFieldType(*addr))
-			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
+		if (!IsCallArgType((SPFieldType)*addr))
+			return pContext->ThrowNativeError("ScriptField type %d cannot be used as a ScriptCall argument at index %d", *addr, i);
 		paramTypes.push_back((SPFieldType)*addr);
 	}
 
@@ -1611,9 +1634,6 @@ static bool MarshalOneArg( IPluginContext *pContext, const cell_t *params, int p
 			VariantMarshal::WriteVariantQuaternion(out, fbuf);
 			break;
 		}
-		case SPFieldType::Variant:
-			pContext->ThrowNativeError("ScriptField_Variant cannot be used as a parameter type; use a concrete type instead");
-			return false;
 		case SPFieldType::Void:
 		default:
 			VariantMarshal::WriteVariantNull(out);
@@ -1657,9 +1677,9 @@ static bool MarshalVariadicArgs(IPluginContext *pContext, const cell_t *params, 
 		cell_t *typeAddr;
 		pContext->LocalToPhysAddr(params[pairBase], &typeAddr);
 
-		if (!IsValidSPFieldType(*typeAddr))
+		if (!IsCallArgType((SPFieldType)*typeAddr))
 		{
-			pContext->ThrowNativeError("Invalid field type %d for extra argument %d", *typeAddr, i);
+			pContext->ThrowNativeError("ScriptField type %d cannot be used as a ScriptCall argument (extra argument %d)", *typeAddr, i);
 			return false;
 		}
 
@@ -1671,6 +1691,13 @@ static bool MarshalVariadicArgs(IPluginContext *pContext, const cell_t *params, 
 	return true;
 }
 
+struct ScopedScriptCallExecution
+{
+	ScriptCallContext *pCall;
+	explicit ScopedScriptCallExecution(ScriptCallContext *call) : pCall(call) { pCall->isExecuting = true; }
+	~ScopedScriptCallExecution() { pCall->isExecuting = false; }
+};
+
 // native ScriptStatus ScriptCall.Execute(any ...);
 static cell_t Native_ScriptCall_Execute(IPluginContext *pContext, const cell_t *params)
 {
@@ -1680,11 +1707,18 @@ static cell_t Native_ScriptCall_Execute(IPluginContext *pContext, const cell_t *
 	ScriptCallContext *pCall = ReadScriptCall(pContext, params[1]);
 	if (!pCall) return 0;
 
+	if (pCall->isExecuting)
+		return pContext->ThrowNativeError("ScriptCall is already executing");
+
 	std::vector<ScriptVariant_t> args;
 	if (!MarshalVariadicArgs(pContext, params, 2, pCall->paramTypes, args))
 		return 0;
 
-	ScriptStatus_t result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), nullptr);
+	ScriptStatus_t result;
+	{
+		ScopedScriptCallExecution guard(pCall);
+		result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), nullptr);
+	}
 
 	for (ScriptVariant_t &arg : args)
 		arg.Free();
@@ -1701,6 +1735,9 @@ static cell_t Native_ScriptCall_ExecuteInScope(IPluginContext *pContext, const c
 	ScriptCallContext *pCall = ReadScriptCall(pContext, params[1]);
 	if (!pCall) return 0;
 
+	if (pCall->isExecuting)
+		return pContext->ThrowNativeError("ScriptCall is already executing");
+
 	HSCRIPT hScope;
 	if (!ReadHScriptParam(pContext, params[2], hScope))
 		return 0;
@@ -1709,7 +1746,11 @@ static cell_t Native_ScriptCall_ExecuteInScope(IPluginContext *pContext, const c
 	if (!MarshalVariadicArgs(pContext, params, 3, pCall->paramTypes, args))
 		return 0;
 
-	ScriptStatus_t result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), hScope);
+	ScriptStatus_t result;
+	{
+		ScopedScriptCallExecution guard(pCall);
+		result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), hScope);
+	}
 
 	for (ScriptVariant_t &arg : args)
 		arg.Free();

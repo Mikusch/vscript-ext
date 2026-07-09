@@ -25,14 +25,22 @@ enum class HScriptOwnership
 	Borrowed, // Engine manages the HSCRIPT lifetime
 };
 
+extern uint32_t g_vmGeneration;
+
+inline bool IsCurrentGeneration(uint32_t generation) { return generation == g_vmGeneration; }
+IScriptVM *GetVMForGeneration(uint32_t generation);
+void ReleaseVMValue(ScriptVariant_t &value, uint32_t generation);
+
 struct HScriptHandle
 {
 	HSCRIPT hScript;
 	HScriptType type;
 	HScriptOwnership ownership;
 
+	uint32_t vmGeneration;
+
 	HScriptHandle(HSCRIPT h, HScriptType t, HScriptOwnership o)
-		: hScript(h), type(t), ownership(o) {}
+		: hScript(h), type(t), ownership(o), vmGeneration(g_vmGeneration) {}
 };
 
 class CVScriptExtension
@@ -93,6 +101,8 @@ private:
 
 	void ClearEntityHandleCache();
 
+	void SetCurrentVM(IScriptVM *pVM);
+
 	void InstallManagerHooks();
 	void RemoveManagerHooks();
 	void InstallVMHooks(IScriptVM *pVM);
@@ -107,7 +117,6 @@ private:
 void ReleaseOwnedHScript(IScriptVM *pVM, HSCRIPT hScript, HScriptType type);
 
 extern CGlobalVars *gpGlobals;
-extern uint32_t g_vmGeneration;
 extern CVScriptExtension g_VScriptExt;
 extern const sp_nativeinfo_t g_VScriptNatives[];
 

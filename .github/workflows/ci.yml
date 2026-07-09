@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
           fetch-depth: 0
@@ -51,7 +51,7 @@ jobs:
           done
 
       - name: Checkout AMBuild
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: alliedmodders/ambuild
           ref: master
@@ -59,7 +59,7 @@ jobs:
           fetch-depth: 1
 
       - name: Checkout SourceMod
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: alliedmodders/sourcemod
           ref: ${{ matrix.sm.ref }}
@@ -68,7 +68,7 @@ jobs:
           fetch-depth: 1
 
       - name: Checkout Metamod:Source
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: alliedmodders/metamod-source
           ref: 1.12-dev
@@ -110,7 +110,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
