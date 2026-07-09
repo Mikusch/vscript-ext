@@ -21,8 +21,8 @@ struct ScriptCallContext
 	uint32_t cachedGeneration = 0;
 
 	// Execution state
-	IScriptVM *pExecutedVM = nullptr;
 	ScriptVariant_t returnValue;
+	uint32_t executedGeneration = 0;
 	bool hasExecuted = false;
 
 	ScriptCallContext(const char *name, SPFieldType retType, std::vector<SPFieldType> params)
@@ -35,6 +35,8 @@ struct ScriptCallContext
 
 	HSCRIPT ResolveFunction(IScriptVM *pVM, HSCRIPT hScope);
 	ScriptStatus_t Execute(IScriptVM *pVM, ScriptVariant_t *pArgs, int nArgs, HSCRIPT hScope);
+
+	void ReleaseReturnValue();
 };
 
 struct RegisteredFunction;

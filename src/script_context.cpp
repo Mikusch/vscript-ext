@@ -3,27 +3,25 @@
 
 ScriptCallContext::~ScriptCallContext()
 {
-	IScriptVM *pCurrentVM = g_VScriptExt.GetVM();
+	if (IScriptVM *pVM = GetVMForGeneration(cachedGeneration); hCachedFunction && pVM)
+		pVM->ReleaseFunction(hCachedFunction);
 
-	if (hCachedFunction && pCurrentVM && cachedGeneration == g_vmGeneration)
-		pCurrentVM->ReleaseFunction(hCachedFunction);
+	ReleaseReturnValue();
+}
 
-	if (pExecutedVM)
-	{
-		if (pExecutedVM == pCurrentVM)
-			pExecutedVM->ReleaseValue(returnValue);
-		else
-			returnValue.Free();
-	}
+void ScriptCallContext::ReleaseReturnValue()
+{
+	if (hasExecuted)
+		ReleaseVMValue(returnValue, executedGeneration);
 }
 
 HSCRIPT ScriptCallContext::ResolveFunction(IScriptVM *pVM, HSCRIPT hScope)
 {
-	if (cachedGeneration != g_vmGeneration || hCachedScope != hScope)
+	if (!IsCurrentGeneration(cachedGeneration) || hCachedScope != hScope)
 	{
-		// Only release if the VM is still the same one that created the handle
-		if (hCachedFunction && cachedGeneration == g_vmGeneration)
-			pVM->ReleaseFunction(hCachedFunction);
+		// Only release if the VM that created the handle is still live
+		if (IScriptVM *pOwner = GetVMForGeneration(cachedGeneration); hCachedFunction && pOwner)
+			pOwner->ReleaseFunction(hCachedFunction);
 
 		hCachedFunction = nullptr;
 	}
@@ -41,13 +39,7 @@ HSCRIPT ScriptCallContext::ResolveFunction(IScriptVM *pVM, HSCRIPT hScope)
 
 ScriptStatus_t ScriptCallContext::Execute(IScriptVM *pVM, ScriptVariant_t *pArgs, int nArgs, HSCRIPT hScope)
 {
-	if (pExecutedVM)
-	{
-		if (pExecutedVM == pVM)
-			pExecutedVM->ReleaseValue(returnValue);
-		else
-			returnValue.Free();
-	}
+	ReleaseReturnValue();
 
 	HSCRIPT hFunc = ResolveFunction(pVM, hScope);
 	if (!hFunc)
@@ -57,7 +49,7 @@ ScriptStatus_t ScriptCallContext::Execute(IScriptVM *pVM, ScriptVariant_t *pArgs
 	}
 
 	ScriptStatus_t result = pVM->ExecuteFunction(hFunc, pArgs, nArgs, &returnValue, hScope, true);
-	pExecutedVM = pVM;
+	executedGeneration = g_vmGeneration;
 	hasExecuted = true;
 	return result;
 }

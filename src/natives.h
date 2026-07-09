@@ -35,14 +35,10 @@ struct ScriptIteratorState
 
 	void ReleaseCurrentValues()
 	{
-		if (hasValue && vmGeneration == g_vmGeneration)
+		if (hasValue)
 		{
-			IScriptVM *pVM = g_VScriptExt.GetVM();
-			if (pVM)
-			{
-				pVM->ReleaseValue(key);
-				pVM->ReleaseValue(value);
-			}
+			ReleaseVMValue(key, vmGeneration);
+			ReleaseVMValue(value, vmGeneration);
 		}
 		hasValue = false;
 	}

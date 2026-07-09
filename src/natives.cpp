@@ -106,6 +106,12 @@ static ScriptIteratorState *ReadScriptIterator(IPluginContext *pContext, Handle_
 		return nullptr;
 	}
 
+	if (!IsCurrentGeneration(pIter->vmGeneration))
+	{
+		pContext->ThrowNativeError("ScriptIterator is no longer valid");
+		return nullptr;
+	}
+
 	return pIter;
 }
 
@@ -1485,6 +1491,12 @@ static ScriptCallContext *ReadExecutedScriptCall(IPluginContext *pContext, Handl
 	if (!pCall->hasExecuted)
 	{
 		pContext->ThrowNativeError("ScriptCall has not been executed yet");
+		return nullptr;
+	}
+
+	if (!IsCurrentGeneration(pCall->executedGeneration))
+	{
+		pContext->ThrowNativeError("ScriptCall return value is no longer valid");
 		return nullptr;
 	}
 
