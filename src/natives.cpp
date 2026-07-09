@@ -75,9 +75,14 @@ static bool ReadOptionalHScriptParam(IPluginContext *pContext, cell_t param, HSC
 	return ReadHScriptParam(pContext, param, out);
 }
 
-static bool IsValidSPFieldType(int value)
+static bool IsDeclarableFieldType(SPFieldType type)
 {
-	return value >= (int)SPFieldType::Void && value <= (int)SPFieldType::Variant;
+	return type >= SPFieldType::Void && type <= SPFieldType::Variant;
+}
+
+static bool IsCallArgType(SPFieldType type)
+{
+	return type >= SPFieldType::Void && type <= SPFieldType::Quaternion;
 }
 
 template <int N>
@@ -265,7 +270,7 @@ static cell_t Native_RegisterFunction(IPluginContext *pContext, const cell_t *pa
 
 	pContext->LocalToString(params[3], &description);
 
-	if (!IsValidSPFieldType(params[4]))
+	if (!IsDeclarableFieldType((SPFieldType)params[4]))
 		return pContext->ThrowNativeError("Invalid return type %d", params[4]);
 	SPFieldType returnType = (SPFieldType)params[4];
 
@@ -275,7 +280,7 @@ static cell_t Native_RegisterFunction(IPluginContext *pContext, const cell_t *pa
 	{
 		cell_t *addr;
 		pContext->LocalToPhysAddr(params[5 + i], &addr);
-		if (!IsValidSPFieldType(*addr))
+		if (!IsDeclarableFieldType((SPFieldType)*addr))
 			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
 		paramTypes.push_back((SPFieldType)*addr);
 	}
@@ -302,7 +307,7 @@ static cell_t Native_RegisterClassFunction(IPluginContext *pContext, const cell_
 
 	pContext->LocalToString(params[4], &description);
 
-	if (!IsValidSPFieldType(params[5]))
+	if (!IsDeclarableFieldType((SPFieldType)params[5]))
 		return pContext->ThrowNativeError("Invalid return type %d", params[5]);
 	SPFieldType returnType = (SPFieldType)params[5];
 
@@ -312,7 +317,7 @@ static cell_t Native_RegisterClassFunction(IPluginContext *pContext, const cell_
 	{
 		cell_t *addr;
 		pContext->LocalToPhysAddr(params[6 + i], &addr);
-		if (!IsValidSPFieldType(*addr))
+		if (!IsDeclarableFieldType((SPFieldType)*addr))
 			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
 		paramTypes.push_back((SPFieldType)*addr);
 	}
@@ -1527,7 +1532,7 @@ static cell_t Native_ScriptCall_Ctor(IPluginContext *pContext, const cell_t *par
 	if (!name || !name[0])
 		return pContext->ThrowNativeError("Function name cannot be empty");
 
-	if (!IsValidSPFieldType(params[2]))
+	if (!IsDeclarableFieldType((SPFieldType)params[2]))
 		return pContext->ThrowNativeError("Invalid return type %d", params[2]);
 	SPFieldType returnType = (SPFieldType)params[2];
 
@@ -1537,8 +1542,8 @@ static cell_t Native_ScriptCall_Ctor(IPluginContext *pContext, const cell_t *par
 	{
 		cell_t *addr;
 		pContext->LocalToPhysAddr(params[3 + i], &addr);
-		if (!IsValidSPFieldType(*addr))
-			return pContext->ThrowNativeError("Invalid parameter type %d at index %d", *addr, i);
+		if (!IsCallArgType((SPFieldType)*addr))
+			return pContext->ThrowNativeError("ScriptField type %d cannot be used as a ScriptCall argument at index %d", *addr, i);
 		paramTypes.push_back((SPFieldType)*addr);
 	}
 
@@ -1629,9 +1634,6 @@ static bool MarshalOneArg( IPluginContext *pContext, const cell_t *params, int p
 			VariantMarshal::WriteVariantQuaternion(out, fbuf);
 			break;
 		}
-		case SPFieldType::Variant:
-			pContext->ThrowNativeError("ScriptField_Variant cannot be used as a parameter type; use a concrete type instead");
-			return false;
 		case SPFieldType::Void:
 		default:
 			VariantMarshal::WriteVariantNull(out);
@@ -1675,9 +1677,9 @@ static bool MarshalVariadicArgs(IPluginContext *pContext, const cell_t *params, 
 		cell_t *typeAddr;
 		pContext->LocalToPhysAddr(params[pairBase], &typeAddr);
 
-		if (!IsValidSPFieldType(*typeAddr))
+		if (!IsCallArgType((SPFieldType)*typeAddr))
 		{
-			pContext->ThrowNativeError("Invalid field type %d for extra argument %d", *typeAddr, i);
+			pContext->ThrowNativeError("ScriptField type %d cannot be used as a ScriptCall argument (extra argument %d)", *typeAddr, i);
 			return false;
 		}
 
