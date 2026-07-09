@@ -249,6 +249,13 @@ class ExtensionConfig(object):
         '-Wno-tautological-overlap-compare',
       ]
 
+    if cxx.version >= 'clang-16.0':
+      cxx.cxxflags += [
+        '-Wno-nontrivial-memcall',
+        '-Wno-tautological-constant-out-of-range-compare',
+        '-Wno-undefined-bool-conversion',
+      ]
+
     if have_gcc:
       cxx.cflags += ['-mfpmath=sse']
       cxx.cflags += ['-Wno-maybe-uninitialized']
