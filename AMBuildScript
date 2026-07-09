@@ -252,8 +252,6 @@ class ExtensionConfig(object):
     if cxx.version >= 'clang-16.0':
       cxx.cxxflags += [
         '-Wno-nontrivial-memcall',
-        '-Wno-tautological-constant-out-of-range-compare',
-        '-Wno-undefined-bool-conversion',
       ]
 
     if have_gcc:
