@@ -5,7 +5,7 @@
 
 CVScriptExtension g_VScriptExt;
 CGlobalVars *gpGlobals = nullptr;
-uint32_t g_vmGeneration = 0; // Used by ScriptCallContext to invalidate cached function lookups across map changes
+uint32_t g_vmGeneration = 0;
 SMEXT_LINK(&g_VScriptExt);
 
 SH_DECL_HOOK1(IScriptManager, CreateVM, SH_NOATTRIB, 0, IScriptVM *, ScriptLanguage_t);
@@ -54,7 +54,7 @@ IScriptVM *CVScriptExtension::Hook_CreateVM(ScriptLanguage_t language)
 
 	if (pVM)
 	{
-		m_pScriptVM = pVM;
+		SetCurrentVM(pVM);
 
 		SH_ADD_HOOK(IScriptVM, RegisterClass, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterClass), false);
 		SH_ADD_HOOK(IScriptVM, SetErrorCallback, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_SetErrorCallback), false);
@@ -86,8 +86,6 @@ void CVScriptExtension::Hook_DestroyVM(IScriptVM *pVM)
 		SH_REMOVE_HOOK(IScriptVM, SetErrorCallback, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_SetErrorCallback), false);
 		g_pOriginalErrorCallback = nullptr;
 
-		g_vmGeneration++;
-
 		g_CallbackManager.OnVMShutdown();
 
 		if (m_pOnVMShutdown)
@@ -95,7 +93,7 @@ void CVScriptExtension::Hook_DestroyVM(IScriptVM *pVM)
 
 		ClearEntityHandleCache();
 
-		m_pScriptVM = nullptr;
+		SetCurrentVM(nullptr);
 	}
 
 	RETURN_META(MRES_IGNORED);
@@ -214,7 +212,7 @@ void CVScriptExtension::SDK_OnUnload()
 	releaseForward(m_pOnScriptPrint);
 	releaseForward(m_pOnScriptError);
 
-	m_pScriptVM = nullptr;
+	SetCurrentVM(nullptr);
 }
 
 void CVScriptExtension::OnPluginLoaded(IPlugin *plugin)
@@ -268,6 +266,25 @@ void CVScriptExtension::OnEntityDestroyed(CBaseEntity *pEntity)
 	}
 }
 
+void CVScriptExtension::SetCurrentVM(IScriptVM *pVM)
+{
+	m_pScriptVM = pVM;
+	g_vmGeneration++;
+}
+
+IScriptVM *GetVMForGeneration(uint32_t generation)
+{
+	return IsCurrentGeneration(generation) ? g_VScriptExt.GetVM() : nullptr;
+}
+
+void ReleaseVMValue(ScriptVariant_t &value, uint32_t generation)
+{
+	if (IScriptVM *pVM = GetVMForGeneration(generation))
+		pVM->ReleaseValue(value);
+	else
+		value.Free();
+}
+
 void ReleaseOwnedHScript(IScriptVM *pVM, HSCRIPT hScript, HScriptType type)
 {
 	switch (type)
@@ -306,8 +323,7 @@ Handle_t CVScriptExtension::GetOrCreateCachedEntityHandle(CBaseEntity *pEntity, 
 	{
 		HandleSecurity sec(myself->GetIdentity(), myself->GetIdentity());
 		HScriptHandle *pHandle = nullptr;
-		if (handlesys->ReadHandle(it->second, m_htHScript, &sec, (void **)&pHandle) == HandleError_None
-			&& pHandle->hScript == hScript)
+		if (handlesys->ReadHandle(it->second, m_htHScript, &sec, (void **)&pHandle) == HandleError_None && pHandle->hScript == hScript)
 		{
 			return it->second;
 		}
@@ -341,8 +357,9 @@ void CVScriptExtension::OnHandleDestroy(HandleType_t type, void *object)
 	{
 		HScriptHandle *h = static_cast<HScriptHandle *>(object);
 
-		if (h->ownership == HScriptOwnership::Owned && m_pScriptVM && h->hScript)
-			ReleaseOwnedHScript(m_pScriptVM, h->hScript, h->type);
+		if (h->ownership == HScriptOwnership::Owned && h->hScript)
+			if (IScriptVM *pVM = GetVMForGeneration(h->vmGeneration))
+				ReleaseOwnedHScript(pVM, h->hScript, h->type);
 
 		delete h;
 	}

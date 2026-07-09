@@ -15,6 +15,12 @@ HScriptHandle *ReadHScriptHandle(IPluginContext *pContext, Handle_t hndl)
 		return nullptr;
 	}
 
+	if (pHandle->hScript && !IsCurrentGeneration(pHandle->vmGeneration))
+	{
+		pContext->ThrowNativeError("ScriptHandle is no longer valid");
+		return nullptr;
+	}
+
 	return pHandle;
 }
 
