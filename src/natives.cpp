@@ -1812,7 +1812,7 @@ static cell_t Native_ScriptCall_GetReturnHScript(IPluginContext *pContext, const
 		return BAD_HANDLE;
 
 	// Transfer ownership. memset because Free() and operator= both trigger SV_FREE deallocation
-	memset(&pCall->returnValue, 0, sizeof(pCall->returnValue));
+	memset((void *)&pCall->returnValue, 0, sizeof(pCall->returnValue));
 
 	return (cell_t)CreateHScriptHandle(pContext, h, HScriptType::Table, HScriptOwnership::Owned);
 }
