@@ -18,11 +18,11 @@ jobs:
             ref: master
         build:
           - os: ubuntu-latest
-            container: ghcr.io/alliedmodders/build-containers/debian11:latest
+            container: ghcr.io/alliedmodders/build-containers/debian11-clang22:latest
             target: x86
             platform: linux32
           - os: ubuntu-latest
-            container: ghcr.io/alliedmodders/build-containers/debian11:latest
+            container: ghcr.io/alliedmodders/build-containers/debian11-clang22:latest
             target: x86_64
             platform: linux64
           - os: windows-latest
