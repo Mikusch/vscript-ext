@@ -1691,6 +1691,21 @@ static bool MarshalVariadicArgs(IPluginContext *pContext, const cell_t *params, 
 	return true;
 }
 
+// Owns marshalled arguments so partially marshalled ones are freed when marshalling fails
+struct ScopedScriptArgs
+{
+	std::vector<ScriptVariant_t> values;
+
+	~ScopedScriptArgs()
+	{
+		for (ScriptVariant_t &value : values)
+			value.Free();
+	}
+
+	ScriptVariant_t *Data() { return values.empty() ? nullptr : values.data(); }
+	int Count() const { return (int)values.size(); }
+};
+
 struct ScopedScriptCallExecution
 {
 	ScriptCallContext *pCall;
@@ -1710,18 +1725,15 @@ static cell_t Native_ScriptCall_Execute(IPluginContext *pContext, const cell_t *
 	if (pCall->isExecuting)
 		return pContext->ThrowNativeError("ScriptCall is already executing");
 
-	std::vector<ScriptVariant_t> args;
-	if (!MarshalVariadicArgs(pContext, params, 2, pCall->paramTypes, args))
+	ScopedScriptArgs args;
+	if (!MarshalVariadicArgs(pContext, params, 2, pCall->paramTypes, args.values))
 		return 0;
 
 	ScriptStatus_t result;
 	{
 		ScopedScriptCallExecution guard(pCall);
-		result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), nullptr);
+		result = pCall->Execute(pVM, args.Data(), args.Count(), nullptr);
 	}
-
-	for (ScriptVariant_t &arg : args)
-		arg.Free();
 
 	return (cell_t)result;
 }
@@ -1742,18 +1754,15 @@ static cell_t Native_ScriptCall_ExecuteInScope(IPluginContext *pContext, const c
 	if (!ReadHScriptParam(pContext, params[2], hScope))
 		return 0;
 
-	std::vector<ScriptVariant_t> args;
-	if (!MarshalVariadicArgs(pContext, params, 3, pCall->paramTypes, args))
+	ScopedScriptArgs args;
+	if (!MarshalVariadicArgs(pContext, params, 3, pCall->paramTypes, args.values))
 		return 0;
 
 	ScriptStatus_t result;
 	{
 		ScopedScriptCallExecution guard(pCall);
-		result = pCall->Execute(pVM, args.empty() ? nullptr : args.data(), args.size(), hScope);
+		result = pCall->Execute(pVM, args.Data(), args.Count(), hScope);
 	}
-
-	for (ScriptVariant_t &arg : args)
-		arg.Free();
 
 	return (cell_t)result;
 }
