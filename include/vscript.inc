@@ -965,26 +965,6 @@ native bool VScript_GenerateUniqueKey(const char[] root, char[] buffer, int maxl
  */
 native void VScript_AddSearchPath(const char[] path);
 
-/**
- * Looks up a named function on a VScript class.
- *
- * @param className Class name to search (e.g. "CBaseEntity").
- * @param funcName  Function name to look up.
- * @return          A ScriptHandle to the function, or null if not found.
- *
- * @note            The returned handle must be closed when no longer needed.
- */
-stock ScriptHandle VScript_LookupClassFunction(const char[] className, const char[] funcName)
-{
-	ScriptHandle cls = ScriptRootTable.GetHScript(className);
-	if (!cls)
-		return null;
-
-	ScriptHandle func = cls.LookupFunction(funcName);
-	delete cls;
-	return func;
-}
-
 // ============================================================================
 // Extension
 // ============================================================================
