@@ -141,6 +141,7 @@ bool CVScriptExtension::SDK_OnLoad(char *error, size_t maxlength, bool late)
 {
 	sharesys->AddNatives(myself, g_VScriptNatives);
 	sharesys->RegisterLibrary(myself, "vscript");
+	sharesys->AddDependency(myself, "sdkhooks.ext", true, true);
 
 	HandleAccess sec;
 	handlesys->InitAccessDefaults(nullptr, &sec);
