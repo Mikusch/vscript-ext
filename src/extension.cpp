@@ -189,6 +189,14 @@ void CVScriptExtension::SDK_OnUnload()
 
 	plsys->RemovePluginsListener(this);
 
+	// The VM outlives the extension when unloaded mid-map, so it must stop calling into it
+	if (m_pScriptVM)
+	{
+		m_pScriptVM->SetOutputCallback(nullptr);
+		SH_CALL(m_pScriptVM, &IScriptVM::SetErrorCallback)(g_pOriginalErrorCallback);
+		g_pOriginalErrorCallback = nullptr;
+	}
+
 	g_CallbackManager.Shutdown();
 
 	ClearEntityHandleCache();
