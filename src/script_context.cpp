@@ -1,5 +1,4 @@
 #include "script_context.h"
-#include "callback_manager.h"
 
 ScriptCallContext::~ScriptCallContext()
 {
@@ -54,17 +53,18 @@ ScriptStatus_t ScriptCallContext::Execute(IScriptVM *pVM, ScriptVariant_t *pArgs
 	return result;
 }
 
-ScriptContext::ScriptContext(ScriptVariant_t *pArgs, int nArgs, ScriptVariant_t *pReturn, RegisteredFunction *pReg, void *pCallerContext)
+ScriptContext::ScriptContext(ScriptVariant_t *pArgs, int nArgs, ScriptVariant_t *pReturn, const std::vector<SPFieldType> *pParamTypes, bool isMemberFunction, void *pCallerContext)
 	: m_pArgs(pArgs)
 	, m_nArgs(nArgs)
 	, m_pReturn(pReturn)
-	, m_pReg(pReg)
+	, m_pParamTypes(pParamTypes)
+	, m_bMemberFunction(isMemberFunction)
 	, m_pCallerContext(pCallerContext)
 {}
 
 int ScriptContext::GetCallerEntity() const
 {
-	if (!m_pCallerContext || !m_pReg || !m_pReg->isMemberFunction)
+	if (!m_pCallerContext || !m_bMemberFunction)
 		return -1;
 
 	// pCallerContext is the ScriptInstance_t::m_pInstance of the caller (EntityToBCompatRef crashes on non-entities)
@@ -79,8 +79,8 @@ SPFieldType ScriptContext::GetArgType(int index) const
 	if (index < 0 || index >= m_nArgs)
 		return SPFieldType::Void;
 
-	if (m_pReg && index < (int)m_pReg->paramTypes.size() && m_pReg->paramTypes[index] != SPFieldType::Variant)
-		return m_pReg->paramTypes[index];
+	if (m_pParamTypes && index < (int)m_pParamTypes->size() && (*m_pParamTypes)[index] != SPFieldType::Variant)
+		return (*m_pParamTypes)[index];
 
 	return VariantMarshal::ReadVariantType(m_pArgs[index]);
 }
@@ -159,21 +159,43 @@ void ScriptContext::SetReturnFloat(float value)        { m_return = value; }
 void ScriptContext::SetReturnBool(bool value)          { m_return = value; }
 void ScriptContext::SetReturnString(const char *value) { m_return = std::string(value); }
 void ScriptContext::SetReturnHScript(HSCRIPT value)    { m_return = value; }
+void ScriptContext::SetReturnEHandle(CBaseHandle value) { m_return = value; }
 void ScriptContext::SetReturnNull()                    { m_return = std::monostate{}; }
 
 void ScriptContext::SetReturnVector(const float vec[3])
 {
-	m_return = Vec3{{vec[0], vec[1], vec[2]}};
+	m_return = Vector(vec[0], vec[1], vec[2]);
 }
 
 void ScriptContext::SetReturnVector2D(const float vec[2])
 {
-	m_return = Vec2{{vec[0], vec[1]}};
+	m_return = Vector2D(vec[0], vec[1]);
 }
 
 void ScriptContext::SetReturnQuaternion(const float quat[4])
 {
-	m_return = Quat{{quat[0], quat[1], quat[2], quat[3]}};
+	m_return = Quaternion(quat[0], quat[1], quat[2], quat[3]);
+}
+
+bool ScriptContext::ValidateReturnType(SPFieldType valueType, char *error, size_t maxlength) const
+{
+	if (m_returnEngineType < 0)
+		return true;
+
+	if (m_returnEngineType == FIELD_VOID || !m_pReturn)
+	{
+		smutils->Format(error, maxlength, "Function does not return a value");
+		return false;
+	}
+
+	if (!VariantMarshal::CanAssign(m_returnEngineType, valueType))
+	{
+		smutils->Format(error, maxlength, "Function returns '%s', which cannot be set from this value type",
+			ScriptFieldTypeName((int16)m_returnEngineType));
+		return false;
+	}
+
+	return true;
 }
 
 Handle_t ScriptContext::CreateTrackedHScriptHandle(HSCRIPT h)
@@ -228,15 +250,56 @@ void ScriptContext::FlushReturn()
 
 	// Pointer types are deep-copied into the variant and leak because TranslateCall never frees returnValue.
 	// This is the same leak pattern used by the engine's own template bindings in vscript_templates.h.
+	// A value set by a hooked function belongs to the game's allocator, so drop it without freeing.
+	memset((void *)m_pReturn, 0, sizeof(*m_pReturn));
+
 	std::visit(overloaded{
 		[&](std::monostate)        { VariantMarshal::WriteVariantNull(*m_pReturn); },
-		[&](int v)                 { VariantMarshal::WriteVariantInt(*m_pReturn, v); },
+		[&](int v)
+		{
+			if (m_returnEngineType == FIELD_UINT)
+				*m_pReturn = (uint)v;
+			else
+				VariantMarshal::WriteVariantInt(*m_pReturn, v);
+		},
 		[&](float v)               { VariantMarshal::WriteVariantFloat(*m_pReturn, v); },
 		[&](bool v)                { VariantMarshal::WriteVariantBool(*m_pReturn, v); },
 		[&](const std::string &v)  { VariantMarshal::WriteVariantString(*m_pReturn, v.c_str(), false); },
-		[&](const Vec3 &v)         { VariantMarshal::WriteVariantVector(*m_pReturn, v.v); },
-		[&](const Vec2 &v)         { VariantMarshal::WriteVariantVector2D(*m_pReturn, v.v); },
-		[&](const Quat &v)         { VariantMarshal::WriteVariantQuaternion(*m_pReturn, v.v); },
+		[&](const Vector &v)
+		{
+			if (m_returnEngineType == FIELD_QANGLE)
+				VariantMarshal::WriteVariantQAngle(*m_pReturn, v.Base());
+			else
+				VariantMarshal::WriteVariantVector(*m_pReturn, v.Base());
+		},
+		[&](const Vector2D &v)     { VariantMarshal::WriteVariantVector2D(*m_pReturn, v.Base()); },
+		[&](const Quaternion &v)   { VariantMarshal::WriteVariantQuaternion(*m_pReturn, v.Base()); },
 		[&](HSCRIPT v)             { VariantMarshal::WriteVariantHScript(*m_pReturn, v); },
+		[&](CBaseHandle v)         { VariantMarshal::WriteVariantEHandle(*m_pReturn, v); },
+	}, *m_return);
+
+	m_return.reset();
+}
+
+void ScriptContext::PeekReturn(ScriptVariant_t &view) const
+{
+	if (!m_return)
+	{
+		if (m_pReturn)
+			memcpy((void *)&view, (const void *)m_pReturn, sizeof(view));
+		return;
+	}
+
+	std::visit(overloaded{
+		[&](std::monostate)          {},
+		[&](int v)                   { view = v; },
+		[&](float v)                 { view = v; },
+		[&](bool v)                  { view = v; },
+		[&](const std::string &v)    { view = v.c_str(); },
+		[&](const Vector &v)         { view = &v; },
+		[&](const Vector2D &v)       { view = &v; },
+		[&](const Quaternion &v)     { view = &v; },
+		[&](HSCRIPT v)               { view = v; },
+		[&](CBaseHandle v)           { view = v; },
 	}, *m_return);
 }

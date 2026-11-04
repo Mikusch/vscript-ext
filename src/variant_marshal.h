@@ -23,6 +23,7 @@ namespace VariantMarshal
 {
 	int SPFieldToEngine(SPFieldType spType);
 	SPFieldType EngineToSPField(int engineType);
+	bool IsKnownEngineType(int engineType);
 
 	SPFieldType ReadVariantType(const ScriptVariant_t &variant);
 	int ReadVariantInt(const ScriptVariant_t &variant);
@@ -42,8 +43,13 @@ namespace VariantMarshal
 	void WriteVariantVector(ScriptVariant_t &variant, const float vec[3]);
 	void WriteVariantVector2D(ScriptVariant_t &variant, const float vec[2]);
 	void WriteVariantQuaternion(ScriptVariant_t &variant, const float quat[4]);
+	void WriteVariantQAngle(ScriptVariant_t &variant, const float ang[3]);
 	void WriteVariantHScript(ScriptVariant_t &variant, HSCRIPT value);
+	void WriteVariantEHandle(ScriptVariant_t &variant, CBaseHandle value);
 	void WriteVariantNull(ScriptVariant_t &variant);
+
+	// EHandle stands for an entity and Void for null
+	bool CanAssign(int engineType, SPFieldType valueType);
 
 	HSCRIPT LookupFunction(IScriptVM *pVM, const char *name, HSCRIPT hScope);
 }

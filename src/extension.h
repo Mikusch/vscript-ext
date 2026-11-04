@@ -70,6 +70,8 @@ public:
 	HandleType_t GetScriptContextHandleType() const { return m_htScriptContext; }
 	HandleType_t GetScriptCallHandleType() const { return m_htScriptCall; }
 	HandleType_t GetScriptIteratorHandleType() const { return m_htScriptIterator; }
+	HandleType_t GetScriptHookHandleType() const { return m_htScriptHook; }
+	HandleType_t GetScriptHookContextHandleType() const { return m_htScriptHookContext; }
 
 	IForward *GetOnScriptPrintForward() const { return m_pOnScriptPrint; }
 	IForward *GetOnScriptErrorForward() const { return m_pOnScriptError; }
@@ -82,6 +84,8 @@ private:
 	HandleType_t m_htScriptContext = 0;
 	HandleType_t m_htScriptCall = 0;
 	HandleType_t m_htScriptIterator = 0;
+	HandleType_t m_htScriptHook = 0;
+	HandleType_t m_htScriptHookContext = 0;
 	Handle_t m_hRootTable = BAD_HANDLE;
 
 	IForward *m_pOnVMInit = nullptr;
@@ -103,6 +107,7 @@ private:
 	void Hook_DestroyVM(IScriptVM *pVM);
 	void Hook_DestroyVM_Post(IScriptVM *pVM);
 	bool Hook_RegisterClass(ScriptClassDesc_t *pClassDesc);
+	void Hook_RegisterFunction(ScriptFunctionBinding_t *pScriptFunction);
 	void Hook_SetErrorCallback(ScriptErrorFunc_t pFunc);
 };
 

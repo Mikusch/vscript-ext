@@ -2,6 +2,8 @@
 #include "script_context.h"
 #include "variant_marshal.h"
 #include "callback_manager.h"
+#include "script_hook.h"
+#include <iserverunknown.h>
 
 HScriptHandle *ReadHScriptHandle(IPluginContext *pContext, Handle_t hndl)
 {
@@ -1222,6 +1224,21 @@ static ScriptContext *ReadScriptContext(IPluginContext *pContext, Handle_t hndl)
 	return pCtx;
 }
 
+static ScriptContext *ReadReturnableScriptContext(IPluginContext *pContext, Handle_t hndl, SPFieldType valueType)
+{
+	ScriptContext *pCtx = ReadScriptContext(pContext, hndl);
+	if (!pCtx) return nullptr;
+
+	char error[256];
+	if (!pCtx->ValidateReturnType(valueType, error, sizeof(error)))
+	{
+		pContext->ThrowNativeError("%s", error);
+		return nullptr;
+	}
+
+	return pCtx;
+}
+
 template <int N, void (ScriptContext::*GetFn)(int, float *) const>
 static cell_t Native_ScriptContext_GetArgFloatArray(IPluginContext *pContext, const cell_t *params)
 {
@@ -1237,10 +1254,10 @@ static cell_t Native_ScriptContext_GetArgFloatArray(IPluginContext *pContext, co
 	return 0;
 }
 
-template <int N, void (ScriptContext::*SetFn)(const float *)>
+template <int N, SPFieldType Type, void (ScriptContext::*SetFn)(const float *)>
 static cell_t Native_ScriptContext_SetReturnFloatArray(IPluginContext *pContext, const cell_t *params)
 {
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	ScriptContext *pCtx = ReadReturnableScriptContext(pContext, params[1], Type);
 	if (!pCtx) return 0;
 
 	cell_t *cells;
@@ -1351,7 +1368,7 @@ static cell_t Native_ScriptContext_GetArgEntity(IPluginContext *pContext, const 
 // native void ScriptContext.SetReturnInt(int value);
 static cell_t Native_ScriptContext_SetReturnInt(IPluginContext *pContext, const cell_t *params)
 {
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	ScriptContext *pCtx = ReadReturnableScriptContext(pContext, params[1], SPFieldType::Int);
 	if (!pCtx) return 0;
 
 	pCtx->SetReturnInt(params[2]);
@@ -1361,7 +1378,7 @@ static cell_t Native_ScriptContext_SetReturnInt(IPluginContext *pContext, const 
 // native void ScriptContext.SetReturnFloat(float value);
 static cell_t Native_ScriptContext_SetReturnFloat(IPluginContext *pContext, const cell_t *params)
 {
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	ScriptContext *pCtx = ReadReturnableScriptContext(pContext, params[1], SPFieldType::Float);
 	if (!pCtx) return 0;
 
 	pCtx->SetReturnFloat(sp_ctof(params[2]));
@@ -1371,7 +1388,7 @@ static cell_t Native_ScriptContext_SetReturnFloat(IPluginContext *pContext, cons
 // native void ScriptContext.SetReturnBool(bool value);
 static cell_t Native_ScriptContext_SetReturnBool(IPluginContext *pContext, const cell_t *params)
 {
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	ScriptContext *pCtx = ReadReturnableScriptContext(pContext, params[1], SPFieldType::Bool);
 	if (!pCtx) return 0;
 
 	pCtx->SetReturnBool(params[2] != 0);
@@ -1381,7 +1398,7 @@ static cell_t Native_ScriptContext_SetReturnBool(IPluginContext *pContext, const
 // native void ScriptContext.SetReturnString(const char[] value);
 static cell_t Native_ScriptContext_SetReturnString(IPluginContext *pContext, const cell_t *params)
 {
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	ScriptContext *pCtx = ReadReturnableScriptContext(pContext, params[1], SPFieldType::String);
 	if (!pCtx) return 0;
 
 	char *value;
@@ -1394,7 +1411,7 @@ static cell_t Native_ScriptContext_SetReturnString(IPluginContext *pContext, con
 // native void ScriptContext.SetReturnHScript(ScriptHandle value);
 static cell_t Native_ScriptContext_SetReturnHScript(IPluginContext *pContext, const cell_t *params)
 {
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	ScriptContext *pCtx = ReadReturnableScriptContext(pContext, params[1], SPFieldType::HScript);
 	if (!pCtx) return 0;
 
 	if (params[2] == 0)
@@ -1421,16 +1438,22 @@ static cell_t Native_ScriptContext_SetReturnEntity(IPluginContext *pContext, con
 	IScriptVM *pVM = GetVMOrThrow(pContext);
 	if (!pVM) return 0;
 
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	ScriptContext *pCtx = ReadReturnableScriptContext(pContext, params[1], SPFieldType::EHandle);
 	if (!pCtx) return 0;
-
-	FindEntityScriptOffsets();
-	if (s_offsetHScriptInstance == -1)
-		return pContext->ThrowNativeError("Could not find entity hscript instance offset");
 
 	CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(params[2]);
 	if (!pEntity)
 		return pContext->ThrowNativeError("Invalid entity index %d", params[2]);
+
+	if (pCtx->GetReturnEngineType() == FIELD_EHANDLE)
+	{
+		pCtx->SetReturnEHandle(reinterpret_cast<IServerUnknown *>(pEntity)->GetRefEHandle());
+		return 0;
+	}
+
+	FindEntityScriptOffsets();
+	if (s_offsetHScriptInstance == -1)
+		return pContext->ThrowNativeError("Could not find entity hscript instance offset");
 
 	HSCRIPT hScript = EnsureEntityScriptInstance(pVM, pEntity);
 	if (!hScript)
@@ -1443,7 +1466,7 @@ static cell_t Native_ScriptContext_SetReturnEntity(IPluginContext *pContext, con
 // native void ScriptContext.SetReturnNull();
 static cell_t Native_ScriptContext_SetReturnNull(IPluginContext *pContext, const cell_t *params)
 {
-	ScriptContext *pCtx = ReadScriptContext(pContext, params[1]);
+	ScriptContext *pCtx = ReadReturnableScriptContext(pContext, params[1], SPFieldType::Void);
 	if (!pCtx) return 0;
 
 	pCtx->SetReturnNull();
@@ -1855,6 +1878,414 @@ static cell_t Native_ScriptCall_IsReturnNull(IPluginContext *pContext, const cel
 	return pCall->returnValue.IsNull();
 }
 
+// ScriptHook methodmap
+static ScriptHookSetup *ReadScriptHook(IPluginContext *pContext, Handle_t hndl)
+{
+	HandleSecurity sec(pContext->GetIdentity(), myself->GetIdentity());
+	ScriptHookSetup *pSetup = nullptr;
+	HandleError err = handlesys->ReadHandle(hndl, g_VScriptExt.GetScriptHookHandleType(), &sec, (void **)&pSetup);
+
+	if (err != HandleError_None)
+	{
+		pContext->ThrowNativeError("Invalid ScriptHook handle (error %d)", err);
+		return nullptr;
+	}
+
+	return pSetup;
+}
+
+static bool ReadHookParams(IPluginContext *pContext, const cell_t *params, ScriptHookMode &mode, IPluginFunction *&pCallback)
+{
+	if (params[2] != (cell_t)ScriptHookMode::Pre && params[2] != (cell_t)ScriptHookMode::Post)
+	{
+		pContext->ThrowNativeError("Invalid hook mode %d", params[2]);
+		return false;
+	}
+
+	pCallback = pContext->GetFunctionById(params[3]);
+	if (!pCallback)
+	{
+		pContext->ThrowNativeError("Invalid callback function");
+		return false;
+	}
+
+	mode = (ScriptHookMode)params[2];
+	return true;
+}
+
+// native ScriptHook(const char[] name);
+static cell_t Native_ScriptHook_Ctor(IPluginContext *pContext, const cell_t *params)
+{
+	char *name;
+	pContext->LocalToString(params[1], &name);
+
+	std::string className;
+	std::string functionName = name;
+	if (const char *separator = strstr(name, "::"))
+	{
+		className.assign(name, separator - name);
+		functionName = separator + 2;
+
+		if (className.empty())
+			return pContext->ThrowNativeError("Invalid function name '%s'", name);
+	}
+
+	if (functionName.empty() || functionName.find("::") != std::string::npos)
+		return pContext->ThrowNativeError("Invalid function name '%s'", name);
+
+	ScriptHookSetup *pSetup = g_HookManager.CreateSetup(className, functionName);
+
+	Handle_t hndl = handlesys->CreateHandle(
+		g_VScriptExt.GetScriptHookHandleType(),
+		pSetup,
+		pContext->GetIdentity(),
+		myself->GetIdentity(),
+		nullptr);
+
+	if (hndl == BAD_HANDLE)
+	{
+		g_HookManager.DestroySetup(pSetup);
+		return BAD_HANDLE;
+	}
+
+	return (cell_t)hndl;
+}
+
+// native bool ScriptHook.Enable(ScriptHookMode mode, ScriptHookCallback callback);
+static cell_t Native_ScriptHook_Enable(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookSetup *pSetup = ReadScriptHook(pContext, params[1]);
+	if (!pSetup) return 0;
+
+	ScriptHookMode mode;
+	IPluginFunction *pCallback;
+	if (!ReadHookParams(pContext, params, mode, pCallback))
+		return 0;
+
+	return g_HookManager.Enable(pSetup, mode, pCallback);
+}
+
+// native bool ScriptHook.Disable(ScriptHookMode mode, ScriptHookCallback callback);
+static cell_t Native_ScriptHook_Disable(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookSetup *pSetup = ReadScriptHook(pContext, params[1]);
+	if (!pSetup) return 0;
+
+	ScriptHookMode mode;
+	IPluginFunction *pCallback;
+	if (!ReadHookParams(pContext, params, mode, pCallback))
+		return 0;
+
+	return g_HookManager.Disable(pSetup, mode, pCallback);
+}
+
+// ScriptHookContext methodmap
+static ScriptHookContext *ReadScriptHookContext(IPluginContext *pContext, Handle_t hndl)
+{
+	HandleSecurity sec(pContext->GetIdentity(), myself->GetIdentity());
+	ScriptContext *pCtx = nullptr;
+	HandleError err = handlesys->ReadHandle(hndl, g_VScriptExt.GetScriptHookContextHandleType(), &sec, (void **)&pCtx);
+
+	if (err != HandleError_None)
+	{
+		pContext->ThrowNativeError("Invalid ScriptHookContext handle (error %d)", err);
+		return nullptr;
+	}
+
+	return static_cast<ScriptHookContext *>(pCtx);
+}
+
+static ScriptHookContext *ReadWritableArg(IPluginContext *pContext, const cell_t *params, SPFieldType valueType)
+{
+	ScriptHookContext *pCtx = ReadScriptHookContext(pContext, params[1]);
+	if (!pCtx) return nullptr;
+
+	char error[256];
+	if (!pCtx->ValidateArg(params[2], valueType, error, sizeof(error)))
+	{
+		pContext->ThrowNativeError("%s", error);
+		return nullptr;
+	}
+
+	return pCtx;
+}
+
+static ScriptHookContext *ReadReadableReturn(IPluginContext *pContext, Handle_t hndl)
+{
+	ScriptHookContext *pCtx = ReadScriptHookContext(pContext, hndl);
+	if (!pCtx) return nullptr;
+
+	if (!pCtx->IsPost())
+	{
+		pContext->ThrowNativeError("Return value is only available in post hooks");
+		return nullptr;
+	}
+
+	if (pCtx->GetReturnEngineType() == FIELD_VOID)
+	{
+		pContext->ThrowNativeError("Function does not return a value");
+		return nullptr;
+	}
+
+	return pCtx;
+}
+
+template <int N, SPFieldType Type, void (ScriptHookContext::*SetFn)(int, const float *)>
+static cell_t Native_ScriptHookContext_SetArgFloatArray(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadWritableArg(pContext, params, Type);
+	if (!pCtx) return 0;
+
+	cell_t *cells;
+	pContext->LocalToPhysAddr(params[3], &cells);
+
+	float fbuf[N];
+	CellsToFloats<N>(cells, fbuf);
+	(pCtx->*SetFn)(params[2], fbuf);
+	return 0;
+}
+
+template <int N, void (*ReadFn)(const ScriptVariant_t &, float *)>
+static cell_t Native_ScriptHookContext_GetReturnFloatArray(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadReadableReturn(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	cell_t *out;
+	pContext->LocalToPhysAddr(params[2], &out);
+
+	ScriptVariant_t view;
+	pCtx->PeekReturn(view);
+
+	float fbuf[N];
+	ReadFn(view, fbuf);
+	FloatsToCells<N>(fbuf, out);
+	return 0;
+}
+
+// native void ScriptHookContext.SetArgInt(int arg, int value);
+static cell_t Native_ScriptHookContext_SetArgInt(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadWritableArg(pContext, params, SPFieldType::Int);
+	if (!pCtx) return 0;
+
+	pCtx->SetArgInt(params[2], params[3]);
+	return 0;
+}
+
+// native void ScriptHookContext.SetArgFloat(int arg, float value);
+static cell_t Native_ScriptHookContext_SetArgFloat(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadWritableArg(pContext, params, SPFieldType::Float);
+	if (!pCtx) return 0;
+
+	pCtx->SetArgFloat(params[2], sp_ctof(params[3]));
+	return 0;
+}
+
+// native void ScriptHookContext.SetArgBool(int arg, bool value);
+static cell_t Native_ScriptHookContext_SetArgBool(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadWritableArg(pContext, params, SPFieldType::Bool);
+	if (!pCtx) return 0;
+
+	pCtx->SetArgBool(params[2], params[3] != 0);
+	return 0;
+}
+
+// native void ScriptHookContext.SetArgString(int arg, const char[] value);
+static cell_t Native_ScriptHookContext_SetArgString(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadWritableArg(pContext, params, SPFieldType::String);
+	if (!pCtx) return 0;
+
+	char *value;
+	pContext->LocalToString(params[3], &value);
+
+	pCtx->SetArgString(params[2], value);
+	return 0;
+}
+
+// native void ScriptHookContext.SetArgHScript(int arg, ScriptHandle value);
+static cell_t Native_ScriptHookContext_SetArgHScript(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadWritableArg(pContext, params, SPFieldType::HScript);
+	if (!pCtx) return 0;
+
+	if (params[3] == 0)
+	{
+		pCtx->SetArgHScript(params[2], nullptr, BAD_HANDLE);
+		return 0;
+	}
+
+	HScriptHandle *pHandle = ReadHScriptHandle(pContext, (Handle_t)params[3]);
+	if (!pHandle) return 0;
+
+	// Clone so the HSCRIPT outlives the plugin's handle until the hooked function has run
+	Handle_t keepAlive = BAD_HANDLE;
+	if (pHandle->hScript)
+	{
+		HandleSecurity sec(pContext->GetIdentity(), myself->GetIdentity());
+		HandleError err = handlesys->CloneHandle((Handle_t)params[3], &keepAlive, myself->GetIdentity(), &sec);
+		if (err != HandleError_None)
+			return pContext->ThrowNativeError("Failed to reference ScriptHandle (error %d)", err);
+	}
+
+	pCtx->SetArgHScript(params[2], pHandle->hScript, keepAlive);
+	return 0;
+}
+
+// native void ScriptHookContext.SetArgEntity(int arg, int entity);
+static cell_t Native_ScriptHookContext_SetArgEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return 0;
+
+	ScriptHookContext *pCtx = ReadWritableArg(pContext, params, SPFieldType::EHandle);
+	if (!pCtx) return 0;
+
+	CBaseEntity *pEntity = gamehelpers->ReferenceToEntity(params[3]);
+	if (!pEntity)
+		return pContext->ThrowNativeError("Invalid entity index %d", params[3]);
+
+	if (pCtx->GetArgEngineType(params[2]) == FIELD_EHANDLE)
+	{
+		pCtx->SetArgEHandle(params[2], reinterpret_cast<IServerUnknown *>(pEntity)->GetRefEHandle());
+		return 0;
+	}
+
+	FindEntityScriptOffsets();
+	if (s_offsetHScriptInstance == -1)
+		return pContext->ThrowNativeError("Could not find entity hscript instance offset");
+
+	HSCRIPT hScript = EnsureEntityScriptInstance(pVM, pEntity);
+	if (!hScript)
+		return pContext->ThrowNativeError("Failed to create script instance for entity %d", params[3]);
+
+	pCtx->SetArgHScript(params[2], hScript, BAD_HANDLE);
+	return 0;
+}
+
+// native void ScriptHookContext.SetArgNull(int arg);
+static cell_t Native_ScriptHookContext_SetArgNull(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadWritableArg(pContext, params, SPFieldType::Void);
+	if (!pCtx) return 0;
+
+	pCtx->SetArgNull(params[2]);
+	return 0;
+}
+
+// native ScriptFieldType ScriptHookContext.ReturnType.get();
+static cell_t Native_ScriptHookContext_ReturnType(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadScriptHookContext(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	int engineType = pCtx->GetReturnEngineType();
+	if ((engineType == FIELD_VARIANT || !VariantMarshal::IsKnownEngineType(engineType)) && pCtx->IsPost())
+	{
+		ScriptVariant_t view;
+		pCtx->PeekReturn(view);
+		return (cell_t)VariantMarshal::ReadVariantType(view);
+	}
+
+	return (cell_t)VariantMarshal::EngineToSPField(engineType);
+}
+
+// native int ScriptHookContext.GetReturnInt();
+static cell_t Native_ScriptHookContext_GetReturnInt(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadReadableReturn(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	ScriptVariant_t view;
+	pCtx->PeekReturn(view);
+	return VariantMarshal::ReadVariantInt(view);
+}
+
+// native float ScriptHookContext.GetReturnFloat();
+static cell_t Native_ScriptHookContext_GetReturnFloat(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadReadableReturn(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	ScriptVariant_t view;
+	pCtx->PeekReturn(view);
+	return sp_ftoc(VariantMarshal::ReadVariantFloat(view));
+}
+
+// native bool ScriptHookContext.GetReturnBool();
+static cell_t Native_ScriptHookContext_GetReturnBool(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadReadableReturn(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	ScriptVariant_t view;
+	pCtx->PeekReturn(view);
+	return VariantMarshal::ReadVariantBool(view);
+}
+
+// native int ScriptHookContext.GetReturnString(char[] buffer, int maxlen);
+static cell_t Native_ScriptHookContext_GetReturnString(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadReadableReturn(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	char *buffer;
+	pContext->LocalToString(params[2], &buffer);
+
+	ScriptVariant_t view;
+	pCtx->PeekReturn(view);
+	return VariantMarshal::ReadVariantString(view, buffer, params[3]);
+}
+
+// native ScriptHandle ScriptHookContext.GetReturnHScript();
+static cell_t Native_ScriptHookContext_GetReturnHScript(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadReadableReturn(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	ScriptVariant_t view;
+	pCtx->PeekReturn(view);
+	if (view.GetType() != FIELD_HSCRIPT)
+		return BAD_HANDLE;
+
+	HSCRIPT h = VariantMarshal::ReadVariantHScript(view);
+	if (!h)
+		return BAD_HANDLE;
+
+	return (cell_t)pCtx->CreateTrackedHScriptHandle(h);
+}
+
+// native int ScriptHookContext.GetReturnEntity();
+static cell_t Native_ScriptHookContext_GetReturnEntity(IPluginContext *pContext, const cell_t *params)
+{
+	IScriptVM *pVM = GetVMOrThrow(pContext);
+	if (!pVM) return -1;
+
+	ScriptHookContext *pCtx = ReadReadableReturn(pContext, params[1]);
+	if (!pCtx) return -1;
+
+	ScriptVariant_t view;
+	pCtx->PeekReturn(view);
+	return VariantToEntityIndex(pVM, view);
+}
+
+// native bool ScriptHookContext.IsReturnNull();
+static cell_t Native_ScriptHookContext_IsReturnNull(IPluginContext *pContext, const cell_t *params)
+{
+	ScriptHookContext *pCtx = ReadReadableReturn(pContext, params[1]);
+	if (!pCtx) return 0;
+
+	ScriptVariant_t view;
+	pCtx->PeekReturn(view);
+	if (view.GetType() == FIELD_HSCRIPT)
+		return VariantMarshal::ReadVariantHScript(view) == nullptr;
+
+	return view.IsNull();
+}
+
 const sp_nativeinfo_t g_VScriptNatives[] =
 {
 	// VM lifecycle
@@ -1944,9 +2375,9 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptContext.SetReturnFloat",      Native_ScriptContext_SetReturnFloat },
 	{ "ScriptContext.SetReturnBool",       Native_ScriptContext_SetReturnBool },
 	{ "ScriptContext.SetReturnString",     Native_ScriptContext_SetReturnString },
-	{ "ScriptContext.SetReturnVector",     Native_ScriptContext_SetReturnFloatArray<3, &ScriptContext::SetReturnVector> },
-	{ "ScriptContext.SetReturnVector2D",   Native_ScriptContext_SetReturnFloatArray<2, &ScriptContext::SetReturnVector2D> },
-	{ "ScriptContext.SetReturnQuaternion", Native_ScriptContext_SetReturnFloatArray<4, &ScriptContext::SetReturnQuaternion> },
+	{ "ScriptContext.SetReturnVector",     Native_ScriptContext_SetReturnFloatArray<3, SPFieldType::Vector, &ScriptContext::SetReturnVector> },
+	{ "ScriptContext.SetReturnVector2D",   Native_ScriptContext_SetReturnFloatArray<2, SPFieldType::Vector2D, &ScriptContext::SetReturnVector2D> },
+	{ "ScriptContext.SetReturnQuaternion", Native_ScriptContext_SetReturnFloatArray<4, SPFieldType::Quaternion, &ScriptContext::SetReturnQuaternion> },
 	{ "ScriptContext.SetReturnHScript",    Native_ScriptContext_SetReturnHScript },
 	{ "ScriptContext.SetReturnEntity",     Native_ScriptContext_SetReturnEntity },
 	{ "ScriptContext.SetReturnNull",       Native_ScriptContext_SetReturnNull },
@@ -1967,6 +2398,34 @@ const sp_nativeinfo_t g_VScriptNatives[] =
 	{ "ScriptCall.GetReturnHScript",      Native_ScriptCall_GetReturnHScript },
 	{ "ScriptCall.GetReturnEntity",       Native_ScriptCall_GetReturnEntity },
 	{ "ScriptCall.IsReturnNull",          Native_ScriptCall_IsReturnNull },
+
+	// ScriptHook methodmap
+	{ "ScriptHook.ScriptHook",                 Native_ScriptHook_Ctor },
+	{ "ScriptHook.Enable",                     Native_ScriptHook_Enable },
+	{ "ScriptHook.Disable",                    Native_ScriptHook_Disable },
+
+	// ScriptHookContext methodmap
+	{ "ScriptHookContext.SetArgInt",           Native_ScriptHookContext_SetArgInt },
+	{ "ScriptHookContext.SetArgFloat",         Native_ScriptHookContext_SetArgFloat },
+	{ "ScriptHookContext.SetArgBool",          Native_ScriptHookContext_SetArgBool },
+	{ "ScriptHookContext.SetArgString",        Native_ScriptHookContext_SetArgString },
+	{ "ScriptHookContext.SetArgVector",        Native_ScriptHookContext_SetArgFloatArray<3, SPFieldType::Vector, &ScriptHookContext::SetArgVector> },
+	{ "ScriptHookContext.SetArgVector2D",      Native_ScriptHookContext_SetArgFloatArray<2, SPFieldType::Vector2D, &ScriptHookContext::SetArgVector2D> },
+	{ "ScriptHookContext.SetArgQuaternion",    Native_ScriptHookContext_SetArgFloatArray<4, SPFieldType::Quaternion, &ScriptHookContext::SetArgQuaternion> },
+	{ "ScriptHookContext.SetArgHScript",       Native_ScriptHookContext_SetArgHScript },
+	{ "ScriptHookContext.SetArgEntity",        Native_ScriptHookContext_SetArgEntity },
+	{ "ScriptHookContext.SetArgNull",          Native_ScriptHookContext_SetArgNull },
+	{ "ScriptHookContext.ReturnType.get",      Native_ScriptHookContext_ReturnType },
+	{ "ScriptHookContext.GetReturnInt",        Native_ScriptHookContext_GetReturnInt },
+	{ "ScriptHookContext.GetReturnFloat",      Native_ScriptHookContext_GetReturnFloat },
+	{ "ScriptHookContext.GetReturnBool",       Native_ScriptHookContext_GetReturnBool },
+	{ "ScriptHookContext.GetReturnString",     Native_ScriptHookContext_GetReturnString },
+	{ "ScriptHookContext.GetReturnVector",     Native_ScriptHookContext_GetReturnFloatArray<3, VariantMarshal::ReadVariantVector> },
+	{ "ScriptHookContext.GetReturnVector2D",   Native_ScriptHookContext_GetReturnFloatArray<2, VariantMarshal::ReadVariantVector2D> },
+	{ "ScriptHookContext.GetReturnQuaternion", Native_ScriptHookContext_GetReturnFloatArray<4, VariantMarshal::ReadVariantQuaternion> },
+	{ "ScriptHookContext.GetReturnHScript",    Native_ScriptHookContext_GetReturnHScript },
+	{ "ScriptHookContext.GetReturnEntity",     Native_ScriptHookContext_GetReturnEntity },
+	{ "ScriptHookContext.IsReturnNull",        Native_ScriptHookContext_IsReturnNull },
 
 	{ nullptr, nullptr }
 };

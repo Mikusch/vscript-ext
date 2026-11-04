@@ -9,6 +9,7 @@ sourceFiles = [
   'script_context.cpp',
   'variant_marshal.cpp',
   'callback_manager.cpp',
+  'script_hook.cpp',
 ]
 
 project = builder.LibraryProject(projectName)

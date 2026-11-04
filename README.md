@@ -219,6 +219,70 @@ player.SetRenderColor(255, 0, 0, 255)
 printl("Is this player SourceTV? " + (player.IsSourceTV() ? "Yep!" : "Nope."))
 ```
 
+### Hooking Native Script Functions
+
+Hook functions that the game exposes to VScript to inspect or change their arguments and return values, or block them entirely.
+Hooks apply to every call, persist across map changes, and are removed automatically when the plugin unloads.
+
+> [!NOTE]
+> Only native functions implemented by the game can be hooked, not functions defined in scripts.
+> Class methods must be hooked on the class that defines them (e.g. `CBaseEntity::SetHealth`, not `CTFPlayer::SetHealth`).
+
+```sourcepawn
+public void OnPluginStart()
+{
+	// void SendToServerConsole(string command)
+	ScriptHook hook = new ScriptHook("SendToServerConsole");
+	hook.Enable(ScriptHook_Pre, OnSendToServerConsole);
+
+	// Alias of SendToServerConsole with its own native binding
+	hook = new ScriptHook("SendToConsoleServer");
+	hook.Enable(ScriptHook_Pre, OnSendToServerConsole);
+
+	// void CBaseEntity::SetHealth(int health)
+	hook = new ScriptHook("CBaseEntity::SetHealth");
+	hook.Enable(ScriptHook_Pre, OnSetHealth);
+
+	// string GetMapName()
+	hook = new ScriptHook("GetMapName");
+	hook.Enable(ScriptHook_Post, OnGetMapNamePost);
+}
+
+Action OnSendToServerConsole(ScriptHookContext context)
+{
+	char command[256];
+	context.GetArgString(0, command, sizeof(command));
+	LogMessage("Blocked server command from VScript: %s", command);
+
+	// Skip the original function
+	return Plugin_Handled;
+}
+
+Action OnSetHealth(ScriptHookContext context)
+{
+	int entity = context.Entity;
+	if (entity < 1 || entity > MaxClients || context.GetArgInt(0) <= 500)
+		return Plugin_Continue;
+
+	// Call the original function with a changed argument
+	context.SetArgInt(0, 500);
+	return Plugin_Changed;
+}
+
+Action OnGetMapNamePost(ScriptHookContext context)
+{
+	char mapName[PLATFORM_MAX_PATH], displayName[PLATFORM_MAX_PATH];
+	context.GetReturnString(mapName, sizeof(mapName));
+
+	// Change the return value, e.g. "workshop/ctf_example.ugc123" to "ctf_example"
+	if (!GetMapDisplayName(mapName, displayName, sizeof(displayName)))
+		return Plugin_Continue;
+
+	context.SetReturnString(displayName);
+	return Plugin_Changed;
+}
+```
+
 ### Iterating Tables and Arrays
 
 Use `ScriptIterator` to traverse key-value pairs in tables, scopes, and arrays:

@@ -2,6 +2,7 @@
 #include "natives.h"
 #include "script_context.h"
 #include "callback_manager.h"
+#include "script_hook.h"
 
 CVScriptExtension g_VScriptExt;
 CGlobalVars *gpGlobals = nullptr;
@@ -11,6 +12,7 @@ SMEXT_LINK(&g_VScriptExt);
 SH_DECL_HOOK1(IScriptManager, CreateVM, SH_NOATTRIB, 0, IScriptVM *, ScriptLanguage_t);
 SH_DECL_HOOK1_void(IScriptManager, DestroyVM, SH_NOATTRIB, 0, IScriptVM *);
 SH_DECL_HOOK1(IScriptVM, RegisterClass, SH_NOATTRIB, 0, bool, ScriptClassDesc_t *);
+SH_DECL_HOOK1_void(IScriptVM, RegisterFunction, SH_NOATTRIB, 0, ScriptFunctionBinding_t *);
 SH_DECL_HOOK1_void(IScriptVM, SetErrorCallback, SH_NOATTRIB, 0, ScriptErrorFunc_t);
 
 static void OnScriptOutput(const char *pszText)
@@ -55,8 +57,10 @@ IScriptVM *CVScriptExtension::Hook_CreateVM(ScriptLanguage_t language)
 	if (pVM)
 	{
 		SetCurrentVM(pVM);
+		g_HookManager.OnVMCreated();
 
 		SH_ADD_HOOK(IScriptVM, RegisterClass, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterClass), false);
+		SH_ADD_HOOK(IScriptVM, RegisterFunction, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterFunction), false);
 		SH_ADD_HOOK(IScriptVM, SetErrorCallback, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_SetErrorCallback), false);
 
 		pVM->SetOutputCallback(&OnScriptOutput);
@@ -74,8 +78,16 @@ IScriptVM *CVScriptExtension::Hook_CreateVM(ScriptLanguage_t language)
 bool CVScriptExtension::Hook_RegisterClass(ScriptClassDesc_t *pClassDesc)
 {
 	g_CallbackManager.OnRegisterClass(pClassDesc);
+	g_HookManager.OnRegisterClass(pClassDesc);
 
 	RETURN_META_VALUE(MRES_IGNORED, true);
+}
+
+void CVScriptExtension::Hook_RegisterFunction(ScriptFunctionBinding_t *pScriptFunction)
+{
+	g_HookManager.OnRegisterFunction(pScriptFunction);
+
+	RETURN_META(MRES_IGNORED);
 }
 
 void CVScriptExtension::Hook_DestroyVM(IScriptVM *pVM)
@@ -83,9 +95,11 @@ void CVScriptExtension::Hook_DestroyVM(IScriptVM *pVM)
 	if (pVM && pVM == m_pScriptVM)
 	{
 		SH_REMOVE_HOOK(IScriptVM, RegisterClass, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterClass), false);
+		SH_REMOVE_HOOK(IScriptVM, RegisterFunction, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterFunction), false);
 		SH_REMOVE_HOOK(IScriptVM, SetErrorCallback, pVM, SH_MEMBER(this, &CVScriptExtension::Hook_SetErrorCallback), false);
 		g_pOriginalErrorCallback = nullptr;
 
+		g_HookManager.OnVMShutdown();
 		g_CallbackManager.OnVMShutdown();
 
 		if (m_pOnVMShutdown)
@@ -123,6 +137,7 @@ bool CVScriptExtension::SDK_OnMetamodUnload(char *error, size_t maxlen)
 	if (m_pScriptVM)
 	{
 		SH_REMOVE_HOOK(IScriptVM, RegisterClass, m_pScriptVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterClass), false);
+		SH_REMOVE_HOOK(IScriptVM, RegisterFunction, m_pScriptVM, SH_MEMBER(this, &CVScriptExtension::Hook_RegisterFunction), false);
 		SH_REMOVE_HOOK(IScriptVM, SetErrorCallback, m_pScriptVM, SH_MEMBER(this, &CVScriptExtension::Hook_SetErrorCallback), false);
 		g_pOriginalErrorCallback = nullptr;
 	}
@@ -154,6 +169,8 @@ bool CVScriptExtension::SDK_OnLoad(char *error, size_t maxlength, bool late)
 	m_htScriptContext = handlesys->CreateType("ScriptContext", this, 0, nullptr, &contextSec, myself->GetIdentity(), nullptr);
 	m_htScriptCall = handlesys->CreateType("ScriptCall", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
 	m_htScriptIterator = handlesys->CreateType("ScriptIterator", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
+	m_htScriptHook = handlesys->CreateType("ScriptHook", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
+	m_htScriptHookContext = handlesys->CreateType("ScriptHookContext", this, m_htScriptContext, nullptr, &contextSec, myself->GetIdentity(), nullptr);
 
 	// HSCRIPT nullptr = root table in the VM
 	HScriptHandle *pRoot = new HScriptHandle(nullptr, HScriptType::Table, HScriptOwnership::Borrowed);
@@ -165,6 +182,7 @@ bool CVScriptExtension::SDK_OnLoad(char *error, size_t maxlength, bool late)
 	m_pOnScriptError = forwards->CreateForward("VScript_OnScriptError", ET_Ignore, 2, nullptr, Param_Cell, Param_String);
 
 	plsys->AddPluginsListener(this);
+	g_HookManager.Init();
 
 	if (late && !m_pScriptVM)
 		g_pSM->LogMessage(myself, "VScript extension loaded late -- VM will be available after next map change.");
@@ -198,6 +216,8 @@ void CVScriptExtension::SDK_OnUnload()
 		g_pOriginalErrorCallback = nullptr;
 	}
 
+	// Detach first, descriptors hold names owned by the callback manager
+	g_HookManager.Shutdown();
 	g_CallbackManager.Shutdown();
 
 	ClearEntityHandleCache();
@@ -216,6 +236,8 @@ void CVScriptExtension::SDK_OnUnload()
 	removeType(m_htScriptContext);
 	removeType(m_htScriptCall);
 	removeType(m_htScriptIterator);
+	removeType(m_htScriptHookContext);
+	removeType(m_htScriptHook);
 
 	auto releaseForward = [](IForward *&fwd) {
 		if (fwd) { forwards->ReleaseForward(fwd); fwd = nullptr; }
@@ -251,6 +273,7 @@ void CVScriptExtension::OnPluginLoaded(IPlugin *plugin)
 void CVScriptExtension::OnPluginUnloaded(IPlugin *plugin)
 {
 	g_CallbackManager.UnregisterAllForContext(plugin->GetBaseContext());
+	g_HookManager.RemoveCallbacksForContext(plugin->GetBaseContext());
 }
 
 void CVScriptExtension::OnEntityCreated(CBaseEntity *pEntity, const char *classname)
@@ -376,7 +399,7 @@ void CVScriptExtension::OnHandleDestroy(HandleType_t type, void *object)
 
 		delete h;
 	}
-	else if (type == m_htScriptContext)
+	else if (type == m_htScriptContext || type == m_htScriptHookContext)
 	{
 		// ScriptContext lifetime is managed by the dispatcher
 	}
@@ -392,5 +415,9 @@ void CVScriptExtension::OnHandleDestroy(HandleType_t type, void *object)
 			pCall->deleteAfterExecute = true;
 		else
 			delete pCall;
+	}
+	else if (type == m_htScriptHook)
+	{
+		g_HookManager.DestroySetup(static_cast<ScriptHookSetup *>(object));
 	}
 }

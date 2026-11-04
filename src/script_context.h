@@ -41,14 +41,17 @@ struct ScriptCallContext
 	void ReleaseReturnValue();
 };
 
-struct RegisteredFunction;
-
 // The Squirrel VM does NOT set the type field in binding argument variants,
-// so we use the registered parameter types to interpret the raw union data.
+// so we use the declared parameter types to interpret the raw union data.
 class ScriptContext
 {
 public:
-	ScriptContext(ScriptVariant_t *pArgs, int nArgs, ScriptVariant_t *pReturn, RegisteredFunction *pReg, void *pCallerContext = nullptr);
+	ScriptContext(ScriptVariant_t *pArgs, int nArgs, ScriptVariant_t *pReturn, const std::vector<SPFieldType> *pParamTypes, bool isMemberFunction, void *pCallerContext = nullptr);
+	virtual ~ScriptContext() = default;
+
+	ScriptContext(const ScriptContext &) = delete;
+	ScriptContext &operator=(const ScriptContext &) = delete;
+
 	int GetArgCount() const { return m_nArgs; }
 
 	int GetCallerEntity() const;
@@ -71,28 +74,35 @@ public:
 	void SetReturnVector2D(const float vec[2]);
 	void SetReturnQuaternion(const float quat[4]);
 	void SetReturnHScript(HSCRIPT value);
+	void SetReturnEHandle(CBaseHandle value);
 	void SetReturnNull();
+
+	// -1 if SetReturn* values are not checked
+	int GetReturnEngineType() const { return m_returnEngineType; }
+	bool ValidateReturnType(SPFieldType valueType, char *error, size_t maxlength) const;
+
+	// Non-owning view of the pending return value, or of the return slot if none is pending
+	void PeekReturn(ScriptVariant_t &view) const;
 
 	void RaiseException(const char *text);
 	bool HasException() const { return m_bHasException; }
 
 	void FlushReturn();
+	void DiscardReturn() { m_return.reset(); }
 
 	Handle_t CreateTrackedHScriptHandle(HSCRIPT h);
 	void FreeTrackedHandles();
 
-private:
+protected:
 	ScriptVariant_t *m_pArgs;
 	int m_nArgs;
 	ScriptVariant_t *m_pReturn;
-	RegisteredFunction *m_pReg;
+	const std::vector<SPFieldType> *m_pParamTypes;
+	bool m_bMemberFunction;
 	void *m_pCallerContext;
+	int m_returnEngineType = -1;
 
-	struct Vec3  { float v[3]; };
-	struct Vec2  { float v[2]; };
-	struct Quat  { float v[4]; };
-
-	using ReturnValue = std::variant<std::monostate, int, float, bool, std::string, Vec3, Vec2, Quat, HSCRIPT>;
+	using ReturnValue = std::variant<std::monostate, int, float, bool, std::string, Vector, Vector2D, Quaternion, HSCRIPT, CBaseHandle>;
 	std::optional<ReturnValue> m_return;
 	bool m_bHasException = false;
 

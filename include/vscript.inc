@@ -44,6 +44,15 @@ enum ScriptErrorLevel
 	ScriptLevel_Error = 1,        /**< Fatal error */
 };
 
+/**
+ * When a ScriptHook callback is called.
+ */
+enum ScriptHookMode
+{
+	ScriptHook_Pre = 0,           /**< Before the function is called */
+	ScriptHook_Post,              /**< After the function is called */
+};
+
 // ============================================================================
 // Handle types
 // ============================================================================
@@ -745,6 +754,261 @@ methodmap ScriptCall < Handle
 	public native bool IsReturnNull();
 };
 
+/**
+ * Context for ScriptHook callbacks.
+ * Arguments are read with the inherited ScriptContext methods and reflect changes made by earlier callbacks.
+ * SetReturn* values must match the hooked function's return type.
+ */
+methodmap ScriptHookContext < ScriptContext
+{
+	/**
+	 * Sets an integer argument.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @param value     The integer value.
+	 * @error           Not a pre hook, invalid argument index, or the argument does not accept this type.
+	 *
+	 * @note            Changed arguments are only passed to the function if the callback returns Plugin_Changed.
+	 */
+	public native void SetArgInt(int arg, int value);
+
+	/**
+	 * Sets a float argument.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @param value     The float value.
+	 * @error           Not a pre hook, invalid argument index, or the argument does not accept this type.
+	 */
+	public native void SetArgFloat(int arg, float value);
+
+	/**
+	 * Sets a boolean argument.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @param value     The boolean value.
+	 * @error           Not a pre hook, invalid argument index, or the argument does not accept this type.
+	 */
+	public native void SetArgBool(int arg, bool value);
+
+	/**
+	 * Sets a string argument.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @param value     The string value.
+	 * @error           Not a pre hook, invalid argument index, or the argument does not accept this type.
+	 */
+	public native void SetArgString(int arg, const char[] value);
+
+	/**
+	 * Sets a vector or QAngle argument.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @param vec       The vector value.
+	 * @error           Not a pre hook, invalid argument index, or the argument does not accept this type.
+	 */
+	public native void SetArgVector(int arg, const float vec[3]);
+
+	/**
+	 * Sets a Vector2D argument.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @param vec       The Vector2D value.
+	 * @error           Not a pre hook, invalid argument index, or the argument does not accept this type.
+	 */
+	public native void SetArgVector2D(int arg, const float vec[2]);
+
+	/**
+	 * Sets a Quaternion argument.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @param quat      The Quaternion value.
+	 * @error           Not a pre hook, invalid argument index, or the argument does not accept this type.
+	 */
+	public native void SetArgQuaternion(int arg, const float quat[4]);
+
+	/**
+	 * Sets an HSCRIPT argument.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @param value     The ScriptHandle value (null to pass a null HSCRIPT).
+	 * @error           Not a pre hook, invalid argument index, or the argument does not accept this type.
+	 */
+	public native void SetArgHScript(int arg, ScriptHandle value);
+
+	/**
+	 * Sets an HSCRIPT or EHANDLE argument to an entity.
+	 * Creates the entity's script instance if it doesn't already exist.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @param entity    Entity index.
+	 * @error           Not a pre hook, invalid argument index, the argument does not accept this type, or invalid entity index.
+	 */
+	public native void SetArgEntity(int arg, int entity);
+
+	/**
+	 * Sets an HSCRIPT, EHANDLE or variant argument to null.
+	 *
+	 * @param arg       Argument index (0-based).
+	 * @error           Not a pre hook, invalid argument index, or the argument does not accept this type.
+	 */
+	public native void SetArgNull(int arg);
+
+	/**
+	 * The return type of the hooked function.
+	 * For functions returning a variant or a type without a ScriptFieldType equivalent, this is the type of the current return value in post hooks.
+	 */
+	property ScriptFieldType ReturnType {
+		public native get();
+	}
+
+	/**
+	 * Gets the return value as an integer.
+	 *
+	 * @return          The integer return value.
+	 * @error           Not a post hook, or the function does not return a value.
+	 *
+	 * @note            Reflects changes made by earlier post callbacks.
+	 */
+	public native int GetReturnInt();
+
+	/**
+	 * Gets the return value as a float.
+	 *
+	 * @return          The float return value.
+	 * @error           Not a post hook, or the function does not return a value.
+	 */
+	public native float GetReturnFloat();
+
+	/**
+	 * Gets the return value as a boolean.
+	 *
+	 * @return          The boolean return value.
+	 * @error           Not a post hook, or the function does not return a value.
+	 */
+	public native bool GetReturnBool();
+
+	/**
+	 * Gets the return value as a string.
+	 *
+	 * @param buffer    Buffer to store the string.
+	 * @param maxlen    Maximum length of the buffer.
+	 * @return          Number of bytes written.
+	 * @error           Not a post hook, or the function does not return a value.
+	 */
+	public native int GetReturnString(char[] buffer, int maxlen);
+
+	/**
+	 * Gets the return value as a vector.
+	 *
+	 * @param vec       Array to store the vector.
+	 * @error           Not a post hook, or the function does not return a value.
+	 */
+	public native void GetReturnVector(float vec[3]);
+
+	/**
+	 * Gets the return value as a Vector2D.
+	 *
+	 * @param vec       Array to store the Vector2D.
+	 * @error           Not a post hook, or the function does not return a value.
+	 */
+	public native void GetReturnVector2D(float vec[2]);
+
+	/**
+	 * Gets the return value as a Quaternion.
+	 *
+	 * @param quat      Array to store the Quaternion.
+	 * @error           Not a post hook, or the function does not return a value.
+	 */
+	public native void GetReturnQuaternion(float quat[4]);
+
+	/**
+	 * Gets the return value as an HSCRIPT handle.
+	 *
+	 * @return          A ScriptHandle, or null if the return value is not an HSCRIPT.
+	 * @error           Not a post hook, or the function does not return a value.
+	 *
+	 * @note            The returned handle is managed by the extension and freed automatically when the callback returns.
+	 *                  Do not close it.
+	 */
+	public native ScriptHandle GetReturnHScript();
+
+	/**
+	 * Gets the return value as an entity index.
+	 *
+	 * @return          Entity index, or -1 if invalid or not an entity.
+	 * @error           Not a post hook, or the function does not return a value.
+	 */
+	public native int GetReturnEntity();
+
+	/**
+	 * Checks if the return value is null.
+	 *
+	 * @return          True if the return value is null.
+	 * @error           Not a post hook, or the function does not return a value.
+	 */
+	public native bool IsReturnNull();
+};
+
+/**
+ * Callback signature for ScriptHook callbacks.
+ *
+ * @param context   Provides access to the arguments, return value and caller entity of the hooked call.
+ * @return          Pre hooks:
+ *                    Plugin_Continue to call the function with the original arguments.
+ *                    Plugin_Changed to call the function with the arguments set via SetArg*.
+ *                    Plugin_Handled or Plugin_Stop to skip the function. The script receives the value set via SetReturn*, or null if none was set.
+ *                  Post hooks:
+ *                    Plugin_Continue to keep the return value.
+ *                    Plugin_Changed or higher to replace the return value with the one set via SetReturn*.
+ *                  The highest action of all callbacks is used. Plugin_Stop also skips the remaining callbacks of the same mode.
+ *
+ * @note            The ScriptHookContext handle is temporary and only valid during the callback.
+ * @note            Raising an exception in a pre hook skips the function and all post hooks.
+ */
+typedef ScriptHookCallback = function Action (ScriptHookContext context);
+
+/**
+ * Hook on a native VScript function.
+ * Callbacks are called for every call to the function, including calls made through ScriptCall.
+ *
+ * Only functions implemented in C++ can be hooked, not functions defined in scripts.
+ * Hooks attach when the VM registers the function and persist across map changes.
+ * Hooks that fail to attach are reported in the error log once the VM has initialized.
+ */
+methodmap ScriptHook < Handle
+{
+	/**
+	 * Creates a hook for a native VScript function.
+	 *
+	 * @param name      Global function name (e.g. "SendToConsole"), or "Class::Function" for class methods (e.g. "CBaseEntity::SetHealth").
+	 *                  Class methods must be hooked on the class that defines them, the hook then also applies to derived classes that don't define a function of the same name themselves.
+	 * @error           Invalid function name.
+	 *
+	 * @note            Closing the handle removes all callbacks enabled through it.
+	 */
+	public native ScriptHook(const char[] name);
+
+	/**
+	 * Adds a callback to the hook.
+	 *
+	 * @param mode      Whether the callback is called before or after the function.
+	 * @param callback  The callback to add.
+	 * @return          True on success, false if the callback is already enabled for this mode.
+	 * @error           Invalid hook mode or callback function.
+	 */
+	public native bool Enable(ScriptHookMode mode, ScriptHookCallback callback);
+
+	/**
+	 * Removes a callback from the hook.
+	 *
+	 * @param mode      The mode the callback was enabled with.
+	 * @param callback  The callback to remove.
+	 * @return          True on success, false if the callback was not enabled for this mode.
+	 * @error           Invalid hook mode or callback function.
+	 */
+	public native bool Disable(ScriptHookMode mode, ScriptHookCallback callback);
+};
+
 // ============================================================================
 // Forwards
 // ============================================================================
@@ -1083,5 +1347,33 @@ public void __ext_vscript_SetNTVOptional()
 	MarkNativeAsOptional("ScriptCall.GetReturnHScript");
 	MarkNativeAsOptional("ScriptCall.GetReturnEntity");
 	MarkNativeAsOptional("ScriptCall.IsReturnNull");
+
+	// ScriptHook methodmap
+	MarkNativeAsOptional("ScriptHook.ScriptHook");
+	MarkNativeAsOptional("ScriptHook.Enable");
+	MarkNativeAsOptional("ScriptHook.Disable");
+
+	// ScriptHookContext methodmap
+	MarkNativeAsOptional("ScriptHookContext.SetArgInt");
+	MarkNativeAsOptional("ScriptHookContext.SetArgFloat");
+	MarkNativeAsOptional("ScriptHookContext.SetArgBool");
+	MarkNativeAsOptional("ScriptHookContext.SetArgString");
+	MarkNativeAsOptional("ScriptHookContext.SetArgVector");
+	MarkNativeAsOptional("ScriptHookContext.SetArgVector2D");
+	MarkNativeAsOptional("ScriptHookContext.SetArgQuaternion");
+	MarkNativeAsOptional("ScriptHookContext.SetArgHScript");
+	MarkNativeAsOptional("ScriptHookContext.SetArgEntity");
+	MarkNativeAsOptional("ScriptHookContext.SetArgNull");
+	MarkNativeAsOptional("ScriptHookContext.ReturnType.get");
+	MarkNativeAsOptional("ScriptHookContext.GetReturnInt");
+	MarkNativeAsOptional("ScriptHookContext.GetReturnFloat");
+	MarkNativeAsOptional("ScriptHookContext.GetReturnBool");
+	MarkNativeAsOptional("ScriptHookContext.GetReturnString");
+	MarkNativeAsOptional("ScriptHookContext.GetReturnVector");
+	MarkNativeAsOptional("ScriptHookContext.GetReturnVector2D");
+	MarkNativeAsOptional("ScriptHookContext.GetReturnQuaternion");
+	MarkNativeAsOptional("ScriptHookContext.GetReturnHScript");
+	MarkNativeAsOptional("ScriptHookContext.GetReturnEntity");
+	MarkNativeAsOptional("ScriptHookContext.IsReturnNull");
 }
 #endif

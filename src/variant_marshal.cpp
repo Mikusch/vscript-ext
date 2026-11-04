@@ -33,6 +33,7 @@ SPFieldType EngineToSPField(int engineType)
 		case FIELD_FLOAT:      return SPFieldType::Float;
 		case FIELD_VECTOR:     return SPFieldType::Vector;
 		case FIELD_INTEGER:    return SPFieldType::Int;
+		case FIELD_UINT:       return SPFieldType::Int;
 		case FIELD_BOOLEAN:    return SPFieldType::Bool;
 		case FIELD_CSTRING:    return SPFieldType::String;
 		case FIELD_HSCRIPT:    return SPFieldType::HScript;
@@ -43,6 +44,11 @@ SPFieldType EngineToSPField(int engineType)
 		case FIELD_EHANDLE:    return SPFieldType::EHandle;
 		default:               return SPFieldType::Void;
 	}
+}
+
+bool IsKnownEngineType(int engineType)
+{
+	return engineType == FIELD_VOID || EngineToSPField(engineType) != SPFieldType::Void;
 }
 
 SPFieldType ReadVariantType(const ScriptVariant_t &variant)
@@ -151,7 +157,19 @@ void WriteVariantQuaternion(ScriptVariant_t &variant, const float quat[4])
 	variant.ConvertToCopiedData();
 }
 
+void WriteVariantQAngle(ScriptVariant_t &variant, const float ang[3])
+{
+	QAngle a(ang[0], ang[1], ang[2]);
+	variant = a;
+	variant.ConvertToCopiedData();
+}
+
 void WriteVariantHScript(ScriptVariant_t &variant, HSCRIPT value)
+{
+	variant = value;
+}
+
+void WriteVariantEHandle(ScriptVariant_t &variant, CBaseHandle value)
 {
 	variant = value;
 }
@@ -159,6 +177,27 @@ void WriteVariantHScript(ScriptVariant_t &variant, HSCRIPT value)
 void WriteVariantNull(ScriptVariant_t &variant)
 {
 	variant.Free();
+}
+
+bool CanAssign(int engineType, SPFieldType valueType)
+{
+	if (engineType == FIELD_VARIANT)
+		return true;
+
+	switch (valueType)
+	{
+		case SPFieldType::Int:        return engineType == FIELD_INTEGER || engineType == FIELD_UINT;
+		case SPFieldType::Float:      return engineType == FIELD_FLOAT;
+		case SPFieldType::Bool:       return engineType == FIELD_BOOLEAN;
+		case SPFieldType::String:     return engineType == FIELD_CSTRING;
+		case SPFieldType::Vector:     return engineType == FIELD_VECTOR || engineType == FIELD_QANGLE;
+		case SPFieldType::Vector2D:   return engineType == FIELD_VECTOR2D;
+		case SPFieldType::Quaternion: return engineType == FIELD_QUATERNION;
+		case SPFieldType::HScript:    return engineType == FIELD_HSCRIPT;
+		case SPFieldType::EHandle:    return engineType == FIELD_HSCRIPT || engineType == FIELD_EHANDLE;
+		case SPFieldType::Void:       return engineType == FIELD_HSCRIPT || engineType == FIELD_EHANDLE;
+		default:                      return false;
+	}
 }
 
 HSCRIPT LookupFunction(IScriptVM *pVM, const char *name, HSCRIPT hScope)

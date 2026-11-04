@@ -464,7 +464,7 @@ bool CallbackManager::Dispatch(
 		return true;
 	}
 
-	ScriptContext ctx(pArguments, nArguments, pReturn, pReg, pContext);
+	ScriptContext ctx(pArguments, nArguments, pReturn, &pReg->paramTypes, pReg->isMemberFunction, pContext);
 
 	Handle_t hContext = handlesys->CreateHandle(
 		g_VScriptExt.GetScriptContextHandleType(),
