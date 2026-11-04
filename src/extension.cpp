@@ -146,7 +146,11 @@ bool CVScriptExtension::SDK_OnLoad(char *error, size_t maxlength, bool late)
 	handlesys->InitAccessDefaults(nullptr, &sec);
 
 	m_htHScript = handlesys->CreateType("ScriptHandle", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
-	m_htScriptContext = handlesys->CreateType("ScriptContext", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
+	// Context handles wrap stack objects, so plugins must not clone them past the callback
+	HandleAccess contextSec = sec;
+	contextSec.access[HandleAccess_Clone] = HANDLE_RESTRICT_IDENTITY;
+
+	m_htScriptContext = handlesys->CreateType("ScriptContext", this, 0, nullptr, &contextSec, myself->GetIdentity(), nullptr);
 	m_htScriptCall = handlesys->CreateType("ScriptCall", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
 	m_htScriptIterator = handlesys->CreateType("ScriptIterator", this, 0, nullptr, &sec, myself->GetIdentity(), nullptr);
 
