@@ -1710,7 +1710,12 @@ struct ScopedScriptCallExecution
 {
 	ScriptCallContext *pCall;
 	explicit ScopedScriptCallExecution(ScriptCallContext *call) : pCall(call) { pCall->isExecuting = true; }
-	~ScopedScriptCallExecution() { pCall->isExecuting = false; }
+	~ScopedScriptCallExecution()
+	{
+		pCall->isExecuting = false;
+		if (pCall->deleteAfterExecute)
+			delete pCall;
+	}
 };
 
 // native ScriptStatus ScriptCall.Execute(any ...);

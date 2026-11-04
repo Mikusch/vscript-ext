@@ -373,6 +373,11 @@ void CVScriptExtension::OnHandleDestroy(HandleType_t type, void *object)
 	}
 	else if (type == m_htScriptCall)
 	{
-		delete static_cast<ScriptCallContext *>(object);
+		// Deleted from a callback during its own execution
+		ScriptCallContext *pCall = static_cast<ScriptCallContext *>(object);
+		if (pCall->isExecuting)
+			pCall->deleteAfterExecute = true;
+		else
+			delete pCall;
 	}
 }
