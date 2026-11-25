@@ -8,8 +8,10 @@ Supported Games:
 
 * Team Fortress 2
 * Counter-Strike: Source
-* Half-Life 2 Deathmatch
+* Half-Life 2: Deathmatch
 * Day of Defeat: Source
+
+The extension runs on both Linux and Windows, and supports both 64-bit and 32-bit servers.
 
 ## Examples
 
